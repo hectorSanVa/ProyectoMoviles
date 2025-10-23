@@ -2,8 +2,8 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Configuración base de la API
-// Cambiar localhost por tu IP local para que funcione desde el móvil
-const API_BASE_URL = 'http://192.168.1.83:3000/api';
+// URL del backend desplegado en Railway
+const API_BASE_URL = 'https://proyectomoviles-production.up.railway.app/api';
 
 // Crear instancia de axios
 const api = axios.create({
@@ -75,7 +75,7 @@ api.interceptors.response.use(
       
       // Intentar una petición simple para verificar conectividad
       try {
-        const testResponse = await axios.get(`${API_BASE_URL.replace('/api', '')}/health`, { timeout: 5000 });
+        const testResponse = await axios.get(`${API_BASE_URL.replace('/api', '')}/api/health`, { timeout: 5000 });
         console.log('✅ Conexión restaurada');
       } catch (testError) {
         console.log('❌ Conexión aún no disponible');
