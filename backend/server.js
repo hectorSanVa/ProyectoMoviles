@@ -44,10 +44,12 @@ app.get('/', (req, res) => {
 
 // Health check endpoint para Railway
 app.get('/api/health', (req, res) => {
+  console.log('🔍 Health check llamado');
   res.status(200).json({ 
     status: 'OK',
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    database: 'PostgreSQL Railway'
   });
 });
 
