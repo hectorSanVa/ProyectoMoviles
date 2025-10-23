@@ -7,12 +7,12 @@ import { salesService } from '../services/salesService';
 import { receiptService } from '../services/receiptService';
 import { useCart } from '../context/CartContext';
 import BarcodeScanner from '../components/BarcodeScanner';
-import RealBarcodeScanner from '../components/RealBarcodeScanner';
+// import RealBarcodeScanner from '../components/RealBarcodeScanner'; // Comentado para Expo Go
 
 const SalesScreen = ({ navigation }) => {
   const { cart, addToCart, updateQuantity, clearCart, getCartTotal, updateProductStock } = useCart();
   const [showScanner, setShowScanner] = useState(false);
-  const [useRealScanner, setUseRealScanner] = useState(true); // Usar escáner real por defecto
+  const [useRealScanner, setUseRealScanner] = useState(false); // Usar escáner simulado para Expo Go
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [showSearch, setShowSearch] = useState(false);
@@ -468,17 +468,11 @@ const SalesScreen = ({ navigation }) => {
         animationType="slide"
         onRequestClose={() => setShowScanner(false)}
       >
-        {useRealScanner ? (
-          <RealBarcodeScanner 
-            onScan={handleRealBarcodeScanned}
-            onClose={() => setShowScanner(false)}
-          />
-        ) : (
-          <BarcodeScanner 
-            onScan={handleBarcodeScanned}
-            onClose={() => setShowScanner(false)}
-          />
-        )}
+        {/* Comentado para Expo Go - usar solo escáner simulado */}
+        <BarcodeScanner 
+          onScan={handleBarcodeScanned}
+          onClose={() => setShowScanner(false)}
+        />
       </Modal>
 
       {/* Modal para ingresar peso de productos a granel */}
