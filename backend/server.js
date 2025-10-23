@@ -80,6 +80,10 @@ app.use('*', (req, res) => {
 // Iniciar servidor
 const startServer = async () => {
   try {
+    console.log('🚀 Iniciando servidor...');
+    console.log('🔍 Puerto:', PORT);
+    console.log('🔍 Variables de entorno disponibles:', Object.keys(process.env).filter(key => key.includes('DATABASE') || key.includes('DB')));
+    
     // Probar conexión a la base de datos
     await testConnection();
     
@@ -89,9 +93,11 @@ const startServer = async () => {
       console.log(`📱 API disponible en: http://localhost:${PORT}`);
       console.log(`📱 API disponible en: http://192.168.1.83:${PORT}`);
       console.log(`🗄️  Base de datos: ${process.env.DB_NAME || 'inventario_db'}`);
+      console.log('✅ Servidor iniciado correctamente');
     });
   } catch (error) {
     console.error('❌ Error iniciando servidor:', error);
+    console.error('❌ Error completo:', error);
     process.exit(1);
   }
 };
