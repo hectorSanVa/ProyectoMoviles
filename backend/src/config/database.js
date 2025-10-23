@@ -7,11 +7,16 @@ const pool = new Pool(config.database);
 // Función para probar la conexión
 const testConnection = async () => {
   try {
+    console.log('🔍 Intentando conectar a PostgreSQL...');
+    console.log('🔍 DATABASE_URL disponible:', !!process.env.DATABASE_URL);
+    console.log('🔍 Configuración de base de datos:', JSON.stringify(config.database, null, 2));
+    
     const client = await pool.connect();
     console.log('✅ Conexión a PostgreSQL establecida correctamente');
     client.release();
   } catch (err) {
     console.error('❌ Error conectando a PostgreSQL:', err.message);
+    console.error('❌ Error completo:', err);
     process.exit(1);
   }
 };
