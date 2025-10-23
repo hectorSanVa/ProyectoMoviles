@@ -1,21 +1,23 @@
 require('dotenv').config();
 
 const config = {
-  // Configuración del servidor
-  server: {
-    port: process.env.PORT || 3000,
-    host: process.env.HOST || 'localhost',
-    env: process.env.NODE_ENV || 'development',
-  },
-
   // Configuración de la base de datos
   database: {
     host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT || 5432,
     name: process.env.DB_NAME || 'inventario_db',
     user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'password',
+    password: process.env.DB_PASSWORD || '210504',
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    max: 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+  },
+
+  // Configuración del servidor
+  server: {
+    port: process.env.PORT || 3000,
+    host: process.env.HOST || 'localhost',
   },
 
   // Configuración JWT
@@ -24,17 +26,16 @@ const config = {
     expiresIn: process.env.JWT_EXPIRES_IN || '24h',
   },
 
-  // Configuración de archivos
-  upload: {
-    path: process.env.UPLOAD_PATH || './uploads',
-    maxFileSize: parseInt(process.env.MAX_FILE_SIZE) || 5242880, // 5MB
-    allowedTypes: ['image/jpeg', 'image/png', 'image/gif'],
-  },
-
-  // Configuración CORS
+  // Configuración de CORS
   cors: {
     origin: process.env.CORS_ORIGIN || 'http://localhost:19006',
     credentials: true,
+  },
+
+  // Configuración de archivos
+  upload: {
+    path: process.env.UPLOAD_PATH || './uploads',
+    maxSize: process.env.MAX_FILE_SIZE || 5242880, // 5MB
   },
 
   // Configuración de rate limiting
@@ -43,13 +44,10 @@ const config = {
     max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
   },
 
-  // Configuración de la aplicación
-  app: {
-    name: 'Sistema de Inventario y Ventas',
-    version: '1.0.0',
-    url: process.env.APP_URL || 'http://localhost:3000',
-  },
+  // Entorno
+  env: process.env.NODE_ENV || 'development',
+  isDevelopment: process.env.NODE_ENV === 'development',
+  isProduction: process.env.NODE_ENV === 'production',
 };
 
 module.exports = config;
-

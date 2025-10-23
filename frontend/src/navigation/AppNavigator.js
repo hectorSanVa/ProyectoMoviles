@@ -11,12 +11,33 @@ import SalesScreen from '../screens/SalesScreen';
 import InventoryScreen from '../screens/InventoryScreen';
 import ReportsScreen from '../screens/ReportsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import ProductManagementScreen from '../screens/ProductManagementScreen';
+import SuppliersScreen from '../screens/SuppliersScreen';
+import CategoriesScreen from '../screens/CategoriesScreen';
+import ConfigScreen from '../screens/ConfigScreen';
+import ReceiptsScreen from '../screens/ReceiptsScreen';
+import ScannerScreen from '../screens/ScannerScreen';
 
 // Importar contexto de autenticación
 import { useAuth } from '../context/AuthContext';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
+
+// Stack navigator para configuración
+function ConfigStackNavigator() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="ConfigMain" component={ConfigScreen} />
+      <Stack.Screen name="ProductManagement" component={ProductManagementScreen} />
+      <Stack.Screen name="Categories" component={CategoriesScreen} />
+      <Stack.Screen name="Suppliers" component={SuppliersScreen} />
+      <Stack.Screen name="Receipts" component={ReceiptsScreen} />
+      <Stack.Screen name="Scanner" component={ScannerScreen} />
+      <Stack.Screen name="Profile" component={ProfileScreen} />
+    </Stack.Navigator>
+  );
+}
 
 // Navegación principal con tabs
 function MainTabNavigator() {
@@ -42,8 +63,8 @@ function MainTabNavigator() {
             case 'Reports':
               iconName = 'assessment';
               break;
-            case 'Profile':
-              iconName = 'person';
+            case 'Config':
+              iconName = 'settings';
               break;
             default:
               iconName = 'help';
@@ -82,9 +103,9 @@ function MainTabNavigator() {
         options={{ title: 'Reportes' }}
       />
       <Tab.Screen 
-        name="Profile" 
-        component={ProfileScreen} 
-        options={{ title: 'Perfil' }}
+        name="Config" 
+        component={ConfigStackNavigator} 
+        options={{ title: 'Config' }}
       />
     </Tab.Navigator>
   );

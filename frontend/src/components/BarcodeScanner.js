@@ -1,99 +1,124 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
-import { Button, Text, Card, TextInput } from 'react-native-paper';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, Alert, TextInput } from 'react-native';
+import { Button, Text, Card } from 'react-native-paper';
+// import { BarCodeScanner } from 'expo-barcode-scanner'; // Disabled for Expo Go
 import { MaterialIcons } from '@expo/vector-icons';
 
 const BarcodeScanner = ({ onScan, onClose }) => {
   const [manualCode, setManualCode] = useState('');
+  const [showManualInput, setShowManualInput] = useState(false);
+
+  // Códigos de ejemplo para simular
+  const sampleCodes = [
+    '1234567890123',
+    '9876543210987',
+    '5555555555555',
+    '1111111111111',
+    '2222222222222'
+  ];
 
   const handleManualScan = () => {
-    if (!manualCode.trim()) {
+    if (manualCode.trim()) {
+      if (onScan) {
+        onScan(manualCode.trim());
+      }
+      setManualCode('');
+      setShowManualInput(false);
+    } else {
       Alert.alert('Error', 'Por favor ingresa un código');
-      return;
     }
-    
-    console.log('Código ingresado manualmente:', manualCode);
-    
-    // Llamar a la función onScan con el código
-    if (onScan) {
-      onScan(manualCode);
-    }
-    
-    setManualCode('');
-    onClose();
   };
 
-  const simulateScan = () => {
-    // Simular códigos de prueba
-    const testCodes = [
-      '1234567890123',
-      '9876543210987',
-      'PROD001',
-      'TEST123'
-    ];
-    
-    const randomCode = testCodes[Math.floor(Math.random() * testCodes.length)];
-    
-    Alert.alert(
-      'Código simulado',
-      `Código: ${randomCode}`,
-      [
-        { text: 'Usar este código', onPress: () => {
-          if (onScan) {
-            onScan(randomCode);
-          }
-          onClose();
-        }},
-        { text: 'Cancelar', style: 'cancel' }
-      ]
-    );
+  const handleRandomScan = () => {
+    const randomCode = sampleCodes[Math.floor(Math.random() * sampleCodes.length)];
+    if (onScan) {
+      onScan(randomCode);
+    }
   };
 
   return (
     <View style={styles.container}>
       <Card style={styles.card}>
         <Card.Content style={styles.content}>
-          <MaterialIcons name="qr-code-scanner" size={48} color="#2196F3" />
+          <MaterialIcons name="qr-code-scanner" size={64} color="#2196F3" />
           <Text style={styles.title}>Escáner de Códigos</Text>
           <Text style={styles.subtitle}>
-            En modo desarrollo, puedes ingresar el código manualmente
+            En Expo Go, el escáner real no está disponible
           </Text>
-          
-          <TextInput
-            label="Código de barras"
-            value={manualCode}
-            onChangeText={setManualCode}
-            style={styles.input}
-            mode="outlined"
-            placeholder="Ingresa el código aquí"
-          />
-          
-          <Button 
-            mode="contained" 
-            onPress={handleManualScan}
-            style={styles.button}
-            icon="check"
-          >
-            Buscar Producto
-          </Button>
-          
-          <Button 
-            mode="outlined" 
-            onPress={simulateScan}
-            style={styles.button}
-            icon="auto-fix"
-          >
-            Simular Escaneo
-          </Button>
-          
-          <Button 
-            mode="text" 
-            onPress={onClose}
-            style={styles.button}
-            icon="close"
-          >
-            Cerrar
-          </Button>
+          <Text style={styles.description}>
+            Puedes ingresar el código manualmente o usar un código de ejemplo
+          </Text>
+
+          {!showManualInput ? (
+            <View style={styles.buttonContainer}>
+              <Button 
+                mode="contained" 
+                onPress={() => setShowManualInput(true)}
+                style={styles.button}
+                icon="keyboard"
+              >
+                Ingresar Código Manualmente
+              </Button>
+              
+              <Button 
+                mode="outlined" 
+                onPress={handleRandomScan}
+                style={styles.button}
+                icon="shuffle"
+              >
+                Usar Código de Ejemplo
+              </Button>
+              
+              <Button 
+                mode="outlined" 
+                onPress={onClose}
+                style={styles.button}
+                icon="close"
+              >
+                Cerrar
+              </Button>
+            </View>
+          ) : (
+            <View style={styles.manualInputContainer}>
+              <TextInput
+                placeholder="Ingresa el código de barras"
+                value={manualCode}
+                onChangeText={setManualCode}
+                style={styles.textInput}
+                keyboardType="numeric"
+                autoFocus
+              />
+              
+              <View style={styles.manualButtons}>
+                <Button 
+                  mode="contained" 
+                  onPress={handleManualScan}
+                  style={styles.manualButton}
+                  icon="check"
+                >
+                  Escanear
+                </Button>
+                
+                <Button 
+                  mode="outlined" 
+                  onPress={() => setShowManualInput(false)}
+                  style={styles.manualButton}
+                  icon="arrow-left"
+                >
+                  Atrás
+                </Button>
+              </View>
+            </View>
+          )}
+
+          <View style={styles.infoContainer}>
+            <Text style={styles.infoTitle}>Códigos de ejemplo disponibles:</Text>
+            {sampleCodes.map((code, index) => (
+              <Text key={index} style={styles.codeExample}>
+                {code}
+              </Text>
+            ))}
+          </View>
         </Card.Content>
       </Card>
     </View>
@@ -115,28 +140,73 @@ const styles = StyleSheet.create({
   },
   content: {
     alignItems: 'center',
+    padding: 20,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     marginTop: 16,
     textAlign: 'center',
-    color: '#2196F3',
+    color: '#333',
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 16,
     marginTop: 8,
     textAlign: 'center',
     color: '#666',
+  },
+  description: {
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+    color: '#888',
     marginBottom: 20,
   },
-  input: {
+  buttonContainer: {
     width: '100%',
-    marginBottom: 16,
   },
   button: {
+    marginVertical: 8,
     width: '100%',
+  },
+  manualInputContainer: {
+    width: '100%',
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 16,
+    backgroundColor: '#fff',
+  },
+  manualButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  manualButton: {
+    flex: 1,
+    marginHorizontal: 4,
+  },
+  infoContainer: {
+    marginTop: 20,
+    padding: 16,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    width: '100%',
+  },
+  infoTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
     marginBottom: 8,
+    color: '#333',
+  },
+  codeExample: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+    fontFamily: 'monospace',
   },
 });
 

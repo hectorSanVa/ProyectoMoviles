@@ -100,27 +100,31 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+    paddingTop: 20,
   },
   header: {
-    padding: 20,
+    padding: 16,
+    paddingTop: 20,
     backgroundColor: '#fff',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   title: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: 'bold',
     textAlign: 'center',
+    color: '#2c3e50',
   },
   subtitle: {
     textAlign: 'center',
-    color: '#666',
-    marginTop: 5,
+    color: '#7f8c8d',
+    marginTop: 4,
+    fontSize: 14,
   },
   menu: {
-    padding: 10,
+    padding: 8,
   },
   card: {
-    marginBottom: 15,
+    marginBottom: 12,
     borderLeftWidth: 4,
     elevation: 2,
   },

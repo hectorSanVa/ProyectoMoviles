@@ -18,10 +18,20 @@
       "bundleIdentifier": "com.inventario.app"
     },
     "android": {
-      "package": "com.inventario.app"
+      "package": "com.inventario.app",
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "web": {},
-    "plugins": [],
+    "plugins": [
+      "expo-barcode-scanner"
+    ],
     "extra": {
       "eas": {
         "projectId": "de64d617-98ca-4617-a0e2-a33ee2483032"

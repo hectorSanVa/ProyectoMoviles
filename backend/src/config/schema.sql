@@ -58,10 +58,11 @@ CREATE TABLE IF NOT EXISTS sales (
     id SERIAL PRIMARY KEY,
     sale_number VARCHAR(20) UNIQUE NOT NULL,
     user_id INTEGER REFERENCES users(id),
+    customer_name VARCHAR(100) DEFAULT 'Cliente general',
     subtotal DECIMAL(10,2) NOT NULL,
     tax_amount DECIMAL(10,2) DEFAULT 0,
     total DECIMAL(10,2) NOT NULL,
-    payment_method VARCHAR(20) CHECK (payment_method IN ('cash', 'card', 'transfer')),
+    payment_method VARCHAR(20) CHECK (payment_method IN ('efectivo', 'tarjeta', 'transferencia')),
     payment_status VARCHAR(20) DEFAULT 'completed' CHECK (payment_status IN ('pending', 'completed', 'cancelled')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
