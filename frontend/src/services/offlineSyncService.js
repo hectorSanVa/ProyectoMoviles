@@ -99,6 +99,29 @@ export const offlineSyncService = {
               console.log('🧾 Generando comprobante para venta sincronizada...');
               console.log(`📝 Número de venta REAL del servidor: ${result.data.sale_number}`);
               
+              // Eliminar el comprobante OFFLINE anterior si existe (buscar por sale_number que empiece con OFFLINE-)
+              try {
+                const allReceipts = await receiptService.getAllReceipts();
+                const offlineReceipts = allReceipts.filter(r => 
+                  r.sale_number && r.sale_number.startsWith('OFFLINE-')
+                );
+                
+                // Si hay un comprobante OFFLINE con items similares, eliminarlo
+                const receiptToDelete = offlineReceipts.find(r => 
+                  r.total === receiptData.total && 
+                  r.customer_name === receiptData.customer_name &&
+                  r.timestamp && (Date.now() - r.timestamp < 86400000) // Últimas 24 horas
+                );
+                
+                if (receiptToDelete) {
+                  console.log('🗑️ Eliminando comprobante OFFLINE temporal...');
+                  await receiptService.deleteReceipt(receiptToDelete.id);
+                }
+              } catch (deleteError) {
+                console.warn('⚠️ No se pudo eliminar comprobante OFFLINE:', deleteError);
+              }
+              
+              // Generar nuevo comprobante con número REAL
               const receiptResult = await receiptService.generateReceipt({
                 ...receiptData,
                 sale_number: result.data.sale_number,
