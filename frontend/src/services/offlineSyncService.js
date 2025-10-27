@@ -99,23 +99,31 @@ export const offlineSyncService = {
               console.log('🧾 Generando comprobante para venta sincronizada...');
               console.log(`📝 Número de venta REAL del servidor: ${result.data.sale_number}`);
               
-              // Eliminar el comprobante OFFLINE anterior si existe (buscar por sale_number que empiece con OFFLINE-)
+              // Eliminar el comprobante OFFLINE anterior si existe
               try {
                 const allReceipts = await receiptService.getAllReceipts();
                 const offlineReceipts = allReceipts.filter(r => 
                   r.sale_number && r.sale_number.startsWith('OFFLINE-')
                 );
                 
-                // Si hay un comprobante OFFLINE con items similares, eliminarlo
-                const receiptToDelete = offlineReceipts.find(r => 
-                  r.total === receiptData.total && 
-                  r.customer_name === receiptData.customer_name &&
-                  r.timestamp && (Date.now() - r.timestamp < 86400000) // Últimas 24 horas
-                );
+                console.log(`📋 Comprobantes OFFLINE encontrados: ${offlineReceipts.length}`);
+                
+                // Buscar comprobante OFFLINE que coincida
+                const receiptToDelete = offlineReceipts.find(r => {
+                  const sameTotal = Math.abs(Number(r.total) - Number(receiptData.total)) < 0.01;
+                  const sameCustomer = r.customer_name === receiptData.customer_name;
+                  const recent = !r.timestamp || (Date.now() - r.timestamp < 86400000);
+                  
+                  console.log(`🔍 Comprobante OFFLINE: total=${sameTotal}, cliente=${sameCustomer}, reciente=${recent}`);
+                  
+                  return sameTotal && sameCustomer && recent;
+                });
                 
                 if (receiptToDelete) {
-                  console.log('🗑️ Eliminando comprobante OFFLINE temporal...');
+                  console.log(`🗑️ Eliminando comprobante OFFLINE: ${receiptToDelete.sale_number}`);
                   await receiptService.deleteReceipt(receiptToDelete.id);
+                } else {
+                  console.log('⚠️ No se encontró comprobante OFFLINE coincidente');
                 }
               } catch (deleteError) {
                 console.warn('⚠️ No se pudo eliminar comprobante OFFLINE:', deleteError);
