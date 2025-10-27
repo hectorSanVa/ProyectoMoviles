@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TextInput, Modal, TouchableOpacity, Animated, Platform } from 'react-native';
+import { View, StyleSheet, ScrollView, TextInput, Modal, TouchableOpacity, Animated, Platform, KeyboardAvoidingView } from 'react-native';
 import { Button, Paragraph, IconButton, Card, FAB, ActivityIndicator } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
@@ -217,15 +217,19 @@ const CashierAssistant = ({ total, cart, todayStats, products }) => {
         onRequestClose={() => setIsOpen(false)}
       >
         <View style={styles.modalOverlay}>
-          <Animated.View 
-            style={[
-              styles.modalContainer, 
-              { 
-                backgroundColor: theme.colors.background,
-                transform: [{ translateY: slideAnim }]
-              }
-            ]}
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1, justifyContent: 'flex-end' }}
           >
+            <Animated.View 
+              style={[
+                styles.modalContainer, 
+                { 
+                  backgroundColor: theme.colors.background,
+                  transform: [{ translateY: slideAnim }]
+                }
+              ]}
+            >
             {/* Header */}
             <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
               <View style={styles.headerLeft}>
@@ -320,6 +324,7 @@ const CashierAssistant = ({ total, cart, todayStats, products }) => {
               </TouchableOpacity>
             </View>
           </Animated.View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </>

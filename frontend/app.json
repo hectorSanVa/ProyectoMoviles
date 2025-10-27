@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "sdkVersion": "54.0.0",
+    "softwareKeyboardLayoutMode": "pan",
     "splash": {
       "resizeMode": "contain",
       "backgroundColor": "#667eea"
@@ -22,7 +23,7 @@
     },
     "android": {
       "package": "com.inventario.app",
-      "versionCode": 6,
+      "versionCode": 7,
       "adaptiveIcon": {
         "backgroundColor": "#ffffff"
       },
@@ -32,7 +33,9 @@
         "WRITE_EXTERNAL_STORAGE"
       ],
       "compileSdkVersion": 34,
-      "targetSdkVersion": 34
+      "targetSdkVersion": 34,
+      "softwareKeyboardLayoutMode": "pan",
+      "windowSoftInputMode": "adjustResize"
     },
     "web": {},
     "extra": {
