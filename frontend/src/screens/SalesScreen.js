@@ -430,10 +430,14 @@ const SalesScreen = ({ navigation }) => {
 
       if (saleResponse.success) {
         // Generar comprobante
-        // Para ventas offline, usar el receiptData que ya preparamos
+        // Para ventas offline, usar el receiptData que ya preparamos con número temporal
         // Para ventas en línea, usar receiptDataToSave pero agregarle los datos del servidor
         const receiptData = isOfflineSale 
-          ? receiptDataToSave
+          ? {
+              ...receiptDataToSave,
+              id: `temp_${Date.now()}`, // ID temporal para venta offline
+              sale_number: `OFFLINE-${Date.now()}` // Número temporal para venta offline
+            }
           : {
               ...receiptDataToSave,
               id: saleResponse.data.id,
@@ -455,6 +459,14 @@ const SalesScreen = ({ navigation }) => {
           ? `Venta guardada localmente (sin conexión). Se sincronizará automáticamente cuando haya internet.`
           : `Total: $${total.toFixed(2)}`;
 
+        // Limpiar carrito de una vez (tanto para online como offline)
+        await clearCart();
+        setCustomerName('');
+        setCashReceived('');
+        setShowPaymentModal(false);
+        setShowPaymentDetails(false);
+        setWasCartCleared(false);
+        
         // Si es venta offline y tiene comprobante, mostrarlo
         if (isOfflineSale && receiptResult?.success) {
           Alert.alert(
@@ -464,29 +476,12 @@ const SalesScreen = ({ navigation }) => {
               { text: 'Ver Comprobante', onPress: () => {
                 Alert.alert('Comprobante de Venta', receiptResult.receiptText, [{ text: 'OK' }]);
               }},
-              { text: 'OK', onPress: async () => {
-                await clearCart();
-                setCustomerName('');
-                setCashReceived('');
-                setShowPaymentModal(false);
-                setShowPaymentDetails(false);
-                setWasCartCleared(false);
-              }}
+              { text: 'OK' }
             ]
           );
           return; // Salir temprano para ventas offline con comprobante
         } else if (isOfflineSale) {
-          Alert.alert('Venta guardada offline', message, [{ 
-            text: 'OK', 
-            onPress: async () => {
-              await clearCart();
-              setCustomerName('');
-              setCashReceived('');
-              setShowPaymentModal(false);
-              setShowPaymentDetails(false);
-              setWasCartCleared(false);
-            }
-          }]);
+          Alert.alert('Venta guardada offline', message);
           return; // Salir temprano para ventas offline sin comprobante
         } else if (receiptResult?.success) {
           // Hablar el cambio si hay (en pesos mexicanos)
@@ -511,24 +506,12 @@ const SalesScreen = ({ navigation }) => {
               { text: 'Ver Comprobante', onPress: () => {
                 Alert.alert('Comprobante de Venta', receiptResult.receiptText, [{ text: 'OK' }]);
               }},
-              { text: 'OK', onPress: () => {
-                clearCart();
-                setCustomerName('');
-                setCashReceived('');
-                setShowPaymentModal(false);
-              }}
+              { text: 'OK' }
             ]
           );
         } else if (receiptResult && !receiptResult.success) {
           Alert.alert('Venta exitosa', `Total: $${total.toFixed(2)}\n\nError generando comprobante`);
         }
-
-        await clearCart();
-        setCustomerName('');
-        setCashReceived('');
-        setShowPaymentModal(false);
-        setShowPaymentDetails(false);
-        setWasCartCleared(false);
 
         // Si estamos online y hay ventas pendientes, sincronizar
         if (isOnline && pendingSalesCount > 0) {
