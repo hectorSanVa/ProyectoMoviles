@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Button, Card } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -81,9 +81,10 @@ export const AnimatedButton = ({
 };
 
 // Animated Card Component
-export const AnimatedCard = ({ children, style, elevation = 2 }) => {
+export const AnimatedCard = ({ children, style, elevation = 2, onPress, ...props }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const [isPressed, setIsPressed] = useState(false);
 
   useEffect(() => {
     Animated.parallel([
@@ -101,21 +102,53 @@ export const AnimatedCard = ({ children, style, elevation = 2 }) => {
     ]).start();
   }, []);
 
-  return (
+  const handlePressIn = () => {
+    setIsPressed(true);
+    Animated.spring(scaleAnim, {
+      toValue: 0.98,
+      friction: 5,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    setIsPressed(false);
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      friction: 5,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const cardContent = (
     <Animated.View
       style={[
         {
           opacity: fadeAnim,
           transform: [{ scale: scaleAnim }],
         },
-        style,
       ]}
     >
-      <Card style={style} elevation={elevation}>
+      <Card style={style} elevation={elevation} {...props}>
         {children}
       </Card>
     </Animated.View>
   );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={1}
+      >
+        {cardContent}
+      </TouchableOpacity>
+    );
+  }
+
+  return cardContent;
 };
 
 export default { AnimatedButton, AnimatedCard };
