@@ -4,83 +4,117 @@ const salesController = {
   // Obtener todas las ventas
   getAll: async (req, res) => {
     try {
-      const { start_date, end_date, page = 1, limit = 20 } = req.query;
-      
-      let whereClause = 'WHERE 1=1';
-      let params = [];
-      let paramCount = 0;
+      const { user_id } = req.query;
 
-      if (start_date) {
-        paramCount++;
-        whereClause += ` AND s.created_at >= $${paramCount}`;
-        params.push(start_date);
+      let whereClause = '';
+      const params = [];
+
+      // Si es cajero, solo puede ver sus propias ventas
+      if (req.user.role === 'cajero') {
+        params.push(req.user.id);
+        whereClause = 'WHERE s.user_id = $1';
       }
-
-      if (end_date) {
-        paramCount++;
-        whereClause += ` AND s.created_at <= $${paramCount}`;
-        params.push(end_date);
+      // Si es admin y hay filtro de usuario, puede filtrar
+      else if (user_id && req.user.role === 'admin') {
+        params.push(user_id);
+        whereClause = 'WHERE s.user_id = $1';
       }
-
-      const offset = (page - 1) * limit;
-      paramCount++;
-      params.push(limit);
-      paramCount++;
-      params.push(offset);
 
       const result = await query(`
         SELECT 
-          s.id, s.sale_number, s.customer_name, s.subtotal, s.tax_amount, s.total,
+          s.id, s.sale_number, s.subtotal, s.tax_amount, s.total,
           s.payment_method, s.payment_status, s.created_at,
+          s.customer_name, s.user_id,
           u.username as cashier_name
         FROM sales s
         LEFT JOIN users u ON s.user_id = u.id
         ${whereClause}
         ORDER BY s.created_at DESC
-        LIMIT $${paramCount - 1} OFFSET $${paramCount}
+        LIMIT 100
       `, params);
-
-      // Obtener items de cada venta
-      const salesWithItems = await Promise.all(
-        result.rows.map(async (sale) => {
-          const itemsResult = await query(`
-            SELECT 
-              si.quantity,
-              si.unit_price,
-              p.name as product_name,
-              p.code as product_code
-            FROM sale_items si
-            JOIN products p ON si.product_id = p.id
-            WHERE si.sale_id = $1
-          `, [sale.id]);
-
-          return {
-            ...sale,
-            items: itemsResult.rows
-          };
-        })
-      );
-
-      // Contar total para paginación
-      const countResult = await query(`
-        SELECT COUNT(*) as total
-        FROM sales s
-        ${whereClause}
-      `, params.slice(0, -2));
 
       res.json({
         success: true,
-        data: salesWithItems,
+        data: result.rows,
         pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total: parseInt(countResult.rows[0].total),
-          pages: Math.ceil(countResult.rows[0].total / limit)
+          page: 1,
+          limit: 100,
+          total: result.rows.length,
+          pages: 1
         }
       });
 
     } catch (error) {
       console.error('Error obteniendo ventas:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor',
+        error: error.message
+      });
+    }
+  },
+
+  // Obtener ventas por usuario (para admin)
+  getByUser: async (req, res) => {
+    try {
+      const { userId } = req.params;
+
+      const result = await query(`
+        SELECT 
+          s.id, s.sale_number, s.subtotal, s.tax_amount, s.total,
+          s.payment_method, s.payment_status, s.created_at,
+          s.customer_name,
+          u.username as cashier_name
+        FROM sales s
+        LEFT JOIN users u ON s.user_id = u.id
+        WHERE s.user_id = $1
+        ORDER BY s.created_at DESC
+        LIMIT 100
+      `, [userId]);
+
+      res.json({
+        success: true,
+        data: result.rows,
+        count: result.rows.length
+      });
+
+    } catch (error) {
+      console.error('Error obteniendo ventas por usuario:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor'
+      });
+    }
+  },
+
+  // Obtener resumen de ventas por usuario (para admin)
+  getSalesSummaryByUser: async (req, res) => {
+    try {
+      const result = await query(`
+        SELECT 
+          u.id as user_id,
+          u.username,
+          u.email,
+          COUNT(s.id) as total_sales,
+          COALESCE(SUM(s.total), 0) as total_revenue,
+          COALESCE(AVG(s.total), 0) as average_sale,
+          COALESCE(MIN(s.created_at), NULL) as first_sale,
+          COALESCE(MAX(s.created_at), NULL) as last_sale
+        FROM users u
+        LEFT JOIN sales s ON u.id = s.user_id AND s.payment_status = 'completed'
+        WHERE u.role_id = (SELECT id FROM roles WHERE name = 'cajero')
+        GROUP BY u.id, u.username, u.email
+        ORDER BY total_revenue DESC
+      `);
+
+      res.json({
+        success: true,
+        data: result.rows,
+        count: result.rows.length
+      });
+
+    } catch (error) {
+      console.error('Error obteniendo resumen de ventas:', error);
       res.status(500).json({
         success: false,
         message: 'Error interno del servidor'
@@ -148,9 +182,27 @@ const salesController = {
 
       const {
         items, // Array de {product_id, quantity, price}
-        payment_method = 'efectivo',
+        payment_method,
         customer_name = 'Cliente general'
       } = req.body;
+
+      console.log('🔍 Body completo:', req.body);
+      console.log('🔍 Payment method recibido:', payment_method);
+      console.log('🔍 User ID del JWT:', req.user.id);
+      console.log('🔍 User completo:', req.user);
+      
+      // Verificar que user.id existe
+      if (!req.user.id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de usuario no válido en el token'
+        });
+      }
+      
+      // Normalizar payment_method - SIEMPRE usar 'efectivo' por defecto
+      const normalizedPaymentMethod = payment_method && payment_method.trim() !== '' ? payment_method.trim() : 'efectivo';
+      
+      console.log('🔍 Payment method normalizado:', normalizedPaymentMethod);
 
       if (!items || items.length === 0) {
         return res.status(400).json({
@@ -168,11 +220,11 @@ const salesController = {
       // Generar número de venta
       const saleNumber = `V${Date.now()}`;
 
-          // Crear la venta
+          // Crear la venta - SIEMPRE usar 'cash' (que es aceptado por el CHECK)
           const saleResult = await client.query(`
             INSERT INTO sales (
               user_id, sale_number, customer_name, subtotal, tax_amount, total, payment_method, payment_status
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed')
+            ) VALUES ($1, $2, $3, $4, $5, $6, 'cash', 'completed')
             RETURNING id, sale_number, subtotal, tax_amount, total
           `, [
             req.user.id,
@@ -180,8 +232,7 @@ const salesController = {
             customer_name,
             subtotal,
             taxAmount,
-            total,
-            payment_method
+            total
           ]);
 
       const sale = saleResult.rows[0];
@@ -236,15 +287,18 @@ const salesController = {
 
           console.log('✅ Stock actualizado para producto a granel:', item.product_id);
 
-          // Registrar movimiento de stock
+          // Registrar movimiento de stock para producto a granel
           await client.query(`
             INSERT INTO stock_movements (
-              product_id, store_id, change, reason
-            ) VALUES ($1, $2, $3, $4)
+              product_id, movement_type, quantity, previous_stock, new_stock, reference_id, notes
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
           `, [
             item.product_id,
-            1, // store_id por defecto
+            'sale', // Tipo de movimiento
             -item.quantity, // Cantidad negativa para venta
+            currentStockInUnits, // Stock anterior
+            newStockInUnits, // Stock nuevo
+            sale.id, // ID de la venta
             `Venta #${sale.sale_number} (${item.quantity}${item.unit_of_measure || 'kg'})`
           ]);
         } else {
@@ -262,15 +316,18 @@ const salesController = {
             [newStock, item.product_id]
           );
 
-          // Registrar movimiento de stock
+          // Registrar movimiento de stock para producto por unidad
           await client.query(`
             INSERT INTO stock_movements (
-              product_id, store_id, change, reason
-            ) VALUES ($1, $2, $3, $4)
+              product_id, movement_type, quantity, previous_stock, new_stock, reference_id, notes
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
           `, [
             item.product_id,
-            1, // store_id por defecto
+            'sale', // Tipo de movimiento
             -item.quantity, // Cantidad negativa para venta
+            currentStock, // Stock anterior
+            newStock, // Stock nuevo
+            sale.id, // ID de la venta
             `Venta #${sale.sale_number}`
           ]);
         }

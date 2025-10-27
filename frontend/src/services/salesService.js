@@ -55,4 +55,26 @@ export const salesService = {
       throw error;
     }
   },
+
+  // Obtener ventas por usuario
+  getByUser: async (userId) => {
+    try {
+      const response = await api.get(`/sales/user/${userId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error obteniendo ventas por usuario:', error);
+      throw error;
+    }
+  },
+
+  // Obtener resumen de ventas por usuario
+  getSalesSummaryByUser: async () => {
+    try {
+      const response = await api.get('/sales/summary/by-user');
+      return response.data;
+    } catch (error) {
+      console.error('Error obteniendo resumen de ventas:', error);
+      throw error;
+    }
+  }
 };

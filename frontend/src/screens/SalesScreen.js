@@ -1,21 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, FlatList, Alert, Modal, Image, KeyboardAvoidingView, Platform } from 'react-native';
-import { Card, Title, Paragraph, Button, FAB, TextInput, Chip, Divider } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, FlatList, Alert, Modal, Image, KeyboardAvoidingView, Platform, AppState } from 'react-native';
+import { Card, Title, Paragraph, Button, FAB, TextInput, Chip, Divider, Badge } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import { productService } from '../services/productService';
 import { salesService } from '../services/salesService';
 import { receiptService } from '../services/receiptService';
+import { discountService } from '../services/discountService';
+import { offlineSyncService } from '../services/offlineSyncService';
+import { offlineStorageService } from '../services/offlineStorageService';
+import { voiceSearchService } from '../services/voiceSearchService';
 import { useCart } from '../context/CartContext';
-import BarcodeScanner from '../components/BarcodeScanner';
-// import RealBarcodeScanner from '../components/RealBarcodeScanner'; // Comentado para Expo Go
+import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import QRCodeScanner from '../components/QRCodeScanner';
+import CashierAssistant from '../components/CashierAssistant';
 
 const SalesScreen = ({ navigation }) => {
-  const { cart, addToCart, updateQuantity, clearCart, getCartTotal, updateProductStock } = useCart();
-  const [showScanner, setShowScanner] = useState(false);
-  const [useRealScanner, setUseRealScanner] = useState(false); // Usar escáner simulado para Expo Go
+  const { theme } = useTheme();
+  const { user } = useAuth(); // Obtener el usuario actual
+  const { cart, addToCart, updateQuantity, removeFromCart, clearCart, getCartTotal, updateProductStock } = useCart();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [showSearch, setShowSearch] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('efectivo');
   const [customerName, setCustomerName] = useState('');
   const [cashReceived, setCashReceived] = useState('');
@@ -24,27 +31,185 @@ const SalesScreen = ({ navigation }) => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [weightInput, setWeightInput] = useState('');
   const [products, setProducts] = useState([]);
+  const [showPaymentDetails, setShowPaymentDetails] = useState(false);
+  const [wasCartCleared, setWasCartCleared] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+  const [pendingSalesCount, setPendingSalesCount] = useState(0);
+  const [todayStats, setTodayStats] = useState(null);
 
   // Cargar productos al iniciar
   useEffect(() => {
     loadProducts();
-  }, []);
+    checkConnection();
+    loadPendingSalesCount();
+    
+    // Verificar conexión periódicamente
+    const interval = setInterval(() => {
+      checkConnection();
+      loadPendingSalesCount();
+    }, 10000); // Cada 10 segundos
+
+    // Sincronizar cuando la app vuelve al foreground
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        checkConnection();
+        loadPendingSalesCount();
+        if (isOnline) {
+          syncPendingSales();
+        }
+      }
+    });
+
+    return () => {
+      clearInterval(interval);
+      subscription.remove();
+    };
+  }, [isOnline]);
+
+  // Resetear vista de pagos cuando el carrito esté vacío o cuando se agrega el primer producto después de limpiar
+  useEffect(() => {
+    if (cart.length === 0) {
+      setShowPaymentDetails(false);
+      setWasCartCleared(true);
+    } else if (cart.length === 1 && wasCartCleared) {
+      // Si se agrega el primer producto después de haber limpiado el carrito, resetear a vista simple
+      setShowPaymentDetails(false);
+      setWasCartCleared(false);
+    }
+  }, [cart.length, wasCartCleared]);
 
   const loadProducts = async () => {
     try {
-      const response = await productService.getAll();
-      if (response.success) {
-        setProducts(response.data);
+      const online = await offlineSyncService.isOnline();
+      
+      if (online) {
+        // Si hay conexión, cargar desde el servidor
+        console.log('📡 Cargando productos desde servidor...');
+        const response = await productService.getAll();
+        if (response.success) {
+            // Cargar descuentos activos
+          try {
+            console.log('🎫 Llamando a discountService.getActive()...');
+            const discountsResponse = await discountService.getActive();
+            console.log('🎫 Respuesta completa:', JSON.stringify(discountsResponse, null, 2));
+            
+            // Extraer el array de descuentos de la respuesta
+            let discountsArray = [];
+            if (Array.isArray(discountsResponse)) {
+              discountsArray = discountsResponse;
+              console.log('✅ Respuesta es un array directo');
+            } else if (discountsResponse && discountsResponse.data && Array.isArray(discountsResponse.data)) {
+              discountsArray = discountsResponse.data;
+              console.log('✅ Respuesta tiene propiedad .data');
+            } else if (discountsResponse && discountsResponse.discounts && Array.isArray(discountsResponse.discounts)) {
+              discountsArray = discountsResponse.discounts;
+              console.log('✅ Respuesta tiene propiedad .discounts');
+            } else {
+              console.log('❌ No se pudo extraer array de descuentos');
+            }
+            
+            console.log('🎫 Descuentos activos procesados:', discountsArray.length);
+            console.log('🎫 Descuentos:', JSON.stringify(discountsArray, null, 2));
+            
+            // Aplicar descuentos a los productos
+            const productsWithDiscounts = response.data.map(product => {
+              // Buscar si hay un descuento para este producto
+              const productDiscount = discountsArray.find(
+                discount => discount.discount_type === 'product' && 
+                           discount.target_id === product.id
+              );
+              
+              // Buscar si hay un descuento para la categoría
+              const categoryDiscount = discountsArray.find(
+                discount => discount.discount_type === 'category' && 
+                           discount.target_id === product.category_id
+              );
+              
+              // Buscar si hay un descuento global
+              const globalDiscount = discountsArray.find(
+                discount => discount.discount_type === 'global'
+              );
+              
+              // Aplicar descuento (prioridad: producto > categoría > global)
+              const activeDiscount = productDiscount || categoryDiscount || globalDiscount;
+              
+              if (activeDiscount) {
+                const discountPercentage = parseFloat(activeDiscount.discount_percentage);
+                
+                // Calcular precio original según el tipo de producto
+                let originalPrice;
+                if (product.sale_type === 'weight') {
+                  // Para productos a granel, usar price_per_unit
+                  originalPrice = product.price_per_unit || 0;
+                } else {
+                  // Para productos por unidad, usar sale_price
+                  originalPrice = product.sale_price || 0;
+                }
+                
+                const discountAmount = (originalPrice * discountPercentage) / 100;
+                const finalPrice = originalPrice - discountAmount;
+                
+                console.log(`🎫 Aplicando descuento del ${discountPercentage}% a ${product.name} (${product.sale_type})`);
+                console.log(`   Precio original: $${originalPrice}, Precio final: $${finalPrice}`);
+                
+                return {
+                  ...product,
+                  discounted_price: finalPrice,
+                  discount_percentage: discountPercentage,
+                  has_discount: true,
+                  original_price: originalPrice,
+                  discount_type: activeDiscount.discount_type // Guardar el tipo de descuento aplicado
+                };
+              }
+              
+              return product;
+            });
+            
+            setProducts(productsWithDiscounts);
+            
+            // Guardar en caché local para uso offline
+            await offlineStorageService.cacheProducts(productsWithDiscounts);
+            
+            // Actualizar stock en el carrito con los datos más recientes
+            console.log('🔄 Refrescando productos después de venta...');
+            productsWithDiscounts.forEach(product => {
+              console.log(`📦 Producto ${product.name}: stock=${product.stock}, stock_in_units=${product.stock_in_units}`);
+              updateProductStock(product.id, product.stock, product.stock_in_units);
+            });
+          } catch (error) {
+            console.error('Error cargando descuentos:', error);
+            setProducts(response.data);
+            await offlineStorageService.cacheProducts(response.data);
+          }
+        }
+      } else {
+        // Si no hay conexión, cargar desde caché local
+        console.log('📦 Cargando productos desde caché local...');
+        const cachedProducts = await offlineStorageService.getCachedProducts();
         
-        // Actualizar stock en el carrito con los datos más recientes
-        console.log('🔄 Refrescando productos después de venta...');
-        response.data.forEach(product => {
-          console.log(`📦 Producto ${product.name}: stock=${product.stock}, stock_in_units=${product.stock_in_units}`);
-          updateProductStock(product.id, product.stock, product.stock_in_units);
-        });
+        if (cachedProducts.length > 0) {
+          setProducts(cachedProducts);
+          console.log(`✅ ${cachedProducts.length} productos cargados desde caché`);
+        } else {
+          Alert.alert(
+            'Sin conexión',
+            'No hay productos en caché. Por favor, conecta a internet al menos una vez para descargar el catálogo.'
+          );
+        }
       }
     } catch (error) {
       console.error('Error cargando productos:', error);
+      
+      // Intentar cargar desde caché en caso de error
+      try {
+        const cachedProducts = await offlineStorageService.getCachedProducts();
+        if (cachedProducts.length > 0) {
+          setProducts(cachedProducts);
+          console.log('✅ Productos cargados desde caché (fallback)');
+        }
+      } catch (cacheError) {
+        console.error('Error cargando productos desde caché:', cacheError);
+      }
     }
   };
 
@@ -56,45 +221,34 @@ const SalesScreen = ({ navigation }) => {
   const change = paymentMethod === 'efectivo' && cashReceived ? 
     parseFloat(cashReceived) - total : 0;
 
-  const handleBarcodeScanned = async (barcode) => {
-    try {
-      const response = await productService.getByCode(barcode);
-      if (response.success && response.data) {
-        const success = addToCart(response.data, null, handleShowWeightModal);
-        if (success) {
-          Alert.alert('Producto Agregado', `${response.data.name} se ha añadido al carrito.`);
-        }
-      } else {
-        Alert.alert('Producto no encontrado', `No se encontró producto con código: ${barcode}`);
-      }
-    } catch (error) {
-      Alert.alert('Error', 'No se pudo buscar el producto');
-    }
-    setShowScanner(false);
-  };
-
-  const handleRealBarcodeScanned = async (barcode) => {
-    console.log('🔍 Código real escaneado:', barcode);
-    try {
-      const response = await productService.getByCode(barcode);
-      if (response.success && response.data) {
-        const success = addToCart(response.data, null, handleShowWeightModal);
-        if (success) {
-          Alert.alert('Producto Agregado', `${response.data.name} se ha añadido al carrito.`);
-        }
-      } else {
-        Alert.alert('Producto no encontrado', `No se encontró producto con código: ${barcode}`);
-      }
-    } catch (error) {
-      Alert.alert('Error', 'No se pudo buscar el producto');
-    }
-    setShowScanner(false);
-  };
 
   const handleShowWeightModal = (product) => {
     setSelectedProduct(product);
     setWeightInput('');
     setShowWeightModal(true);
+  };
+
+  const handleQRScan = async (code) => {
+    try {
+      const response = await productService.getByCode(code);
+      if (response.success && response.data) {
+        const product = response.data;
+        // Si el producto es a granel, mostrar el modal para ingresar peso
+        if (product.sale_type === 'weight') {
+          handleShowWeightModal(product);
+        } else {
+          // Si es producto por unidad, agregarlo directamente
+          const success = addToCart(product, null, handleShowWeightModal);
+          if (success) {
+            Alert.alert('Producto Agregado', `${product.name} se ha añadido al carrito.`);
+          }
+        }
+      } else {
+        Alert.alert('Producto no encontrado', `No se encontró producto con código: ${code}`);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo buscar el producto');
+    }
   };
 
   const handleAddWeight = () => {
@@ -118,13 +272,72 @@ const SalesScreen = ({ navigation }) => {
 
   const searchProducts = async () => {
     try {
-      const response = await productService.getAll({ search: searchQuery });
-      if (response.success) {
-        setSearchResults(response.data);
-        setShowSearch(true);
+      // Filtrar localmente
+      const filtered = products.filter(product =>
+        product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        product.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        product.category_name?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      setSearchResults(filtered);
+      setShowSearch(true);
+      
+      // Hablar el resultado
+      if (filtered.length === 0) {
+        voiceSearchService.speakProductFound(null, 0);
+      } else if (filtered.length === 1) {
+        voiceSearchService.speakProductFound(filtered[0], 1);
+      } else {
+        voiceSearchService.speakProductFound(null, filtered.length);
       }
     } catch (error) {
+      console.error('Error buscando productos:', error);
       Alert.alert('Error', 'No se pudieron buscar productos');
+      voiceSearchService.speakStatus('Error al buscar productos');
+    }
+  };
+
+  const handlePayButton = () => {
+    setShowPaymentDetails(true);
+    
+    // Hablar el total antes de confirmar la compra
+    voiceSearchService.speakSaleTotal(total);
+  };
+
+  const handleAddMoreProducts = () => {
+    setShowPaymentDetails(false);
+  };
+
+  // Funciones de sincronización offline
+  const checkConnection = async () => {
+    const online = await offlineSyncService.isOnline();
+    setIsOnline(online);
+    console.log(`📶 Estado de conexión: ${online ? 'En línea' : 'Sin conexión'}`);
+  };
+
+  const loadPendingSalesCount = async () => {
+    try {
+      const pendingSales = await offlineSyncService.getPendingSales();
+      const unsyncedCount = pendingSales.filter(s => !s.synced).length;
+      setPendingSalesCount(unsyncedCount);
+    } catch (error) {
+      console.error('Error cargando contador de ventas pendientes:', error);
+    }
+  };
+
+  const syncPendingSales = async () => {
+    if (!isOnline) return;
+    
+    try {
+      const result = await offlineSyncService.syncPendingSales((progress) => {
+        console.log(`🔄 Sincronizando... ${progress.synced}/${progress.total}`);
+      });
+      
+      if (result.synced > 0) {
+        console.log(`✅ ${result.synced} venta(s) sincronizada(s)`);
+        loadPendingSalesCount();
+      }
+    } catch (error) {
+      console.error('Error sincronizando ventas pendientes:', error);
     }
   };
 
@@ -160,11 +373,33 @@ const SalesScreen = ({ navigation }) => {
         }))
       };
 
-      const response = await salesService.create(saleData);
-      if (response.success) {
+      let saleResponse;
+      let isOfflineSale = false;
+
+      try {
+        // Intentar crear venta en servidor
+        saleResponse = await salesService.create(saleData);
+        
+        if (saleResponse.success) {
+          console.log('✅ Venta procesada en línea');
+        } else {
+          throw new Error('Error en servidor');
+        }
+      } catch (error) {
+        // Si falla, guardar localmente
+        console.warn('⚠️ Sin conexión, guardando venta localmente...');
+        const offlineSale = await offlineSyncService.savePendingSale(saleData);
+        saleResponse = { success: true, data: offlineSale };
+        isOfflineSale = true;
+        setPendingSalesCount(prev => prev + 1);
+      }
+
+      if (saleResponse.success) {
         // Generar comprobante
         const receiptData = {
-          ...response.data,
+          ...saleResponse.data,
+          user_id: user.id,
+          cashier_name: user.username,
           items: cart.map(item => ({
             product_name: item.name,
             quantity: item.sale_type === 'weight' ? item.weight : item.quantity,
@@ -175,46 +410,85 @@ const SalesScreen = ({ navigation }) => {
           }))
         };
         
-        const receiptResult = await receiptService.generateReceipt(receiptData);
-        
-        if (receiptResult.success) {
+        let receiptResult;
+        if (!isOfflineSale) {
+          // Solo generar comprobante si no es venta offline
+          receiptResult = await receiptService.generateReceipt(receiptData);
+        }
+
+        const message = isOfflineSale 
+          ? `Venta guardada localmente (sin conexión). Se sincronizará automáticamente cuando haya internet.`
+          : `Total: $${total.toFixed(2)}`;
+
+        if (isOfflineSale) {
+          Alert.alert('Venta guardada offline', message, [{ text: 'OK' }]);
+        } else if (receiptResult?.success) {
+          // Hablar el cambio si hay (en pesos mexicanos)
+          if (paymentMethod === 'efectivo' && change > 0) {
+            const pesos = Math.floor(change);
+            const centavos = Math.round((change - pesos) * 100);
+            
+            let text = `Cambio: ${pesos} pesos`;
+            if (centavos > 0) {
+              text += ` con ${centavos} centavos`;
+            }
+            
+            voiceSearchService.speak(text, { rate: 0.85 });
+          } else if (paymentMethod === 'efectivo' && change === 0) {
+            voiceSearchService.speak('Pago exacto', { rate: 0.85 });
+          }
+          
           Alert.alert(
             'Venta exitosa', 
             `Total: $${total.toFixed(2)}\n\nComprobante generado: ${receiptResult.fileName}`,
             [
               { text: 'Ver Comprobante', onPress: () => {
-                Alert.alert('Comprobante de Venta', receiptResult.receiptText, [
-                  { text: 'OK', onPress: async () => {
-                    await clearCart();
-                    setCustomerName('');
-                    setCashReceived('');
-                    setShowPaymentModal(false);
-                    // No llamar loadProducts aquí porque ya se limpió el carrito
-                  }}
-                ]);
+                Alert.alert('Comprobante de Venta', receiptResult.receiptText, [{ text: 'OK' }]);
               }},
-              { text: 'OK', onPress: async () => {
-                await clearCart();
+              { text: 'OK', onPress: () => {
+                clearCart();
                 setCustomerName('');
                 setCashReceived('');
                 setShowPaymentModal(false);
-                // No llamar loadProducts aquí porque ya se limpió el carrito
               }}
             ]
           );
-        } else {
+        } else if (receiptResult && !receiptResult.success) {
           Alert.alert('Venta exitosa', `Total: $${total.toFixed(2)}\n\nError generando comprobante`);
-          await clearCart();
-          setCustomerName('');
-          setCashReceived('');
-          setShowPaymentModal(false);
-          // No llamar loadProducts aquí porque ya se limpió el carrito
+        }
+
+        await clearCart();
+        setCustomerName('');
+        setCashReceived('');
+        setShowPaymentModal(false);
+        setShowPaymentDetails(false);
+        setWasCartCleared(false);
+
+        // Si estamos online y hay ventas pendientes, sincronizar
+        if (isOnline && pendingSalesCount > 0) {
+          syncPendingSales();
         }
       } else {
         Alert.alert('Error', 'No se pudo procesar la venta');
       }
     } catch (error) {
-      Alert.alert('Error', 'Error al procesar la venta');
+      console.error('Error procesando venta:', error);
+      
+      // Intentar guardar como venta offline si todavía no se guardó
+      if (!error.message?.includes('offline')) {
+        try {
+          await offlineSyncService.savePendingSale(saleData);
+          Alert.alert('Venta guardada offline', 'Se sincronizará cuando haya conexión');
+          await clearCart();
+          setCustomerName('');
+          setCashReceived('');
+          setShowPaymentModal(false);
+          setShowPaymentDetails(false);
+          setWasCartCleared(false);
+        } catch (saveError) {
+          Alert.alert('Error', 'Error al procesar la venta');
+        }
+      }
     }
   };
 
@@ -225,7 +499,7 @@ const SalesScreen = ({ navigation }) => {
     const unitPrice = isBulkProduct ? item.price / item.weight : item.price;
     
     return (
-      <Card style={styles.cartItem}>
+      <Card style={[styles.cartItem, { backgroundColor: theme.colors.surface }]}>
         <Card.Content>
           {/* Header con imagen, nombre y botón eliminar */}
           <View style={styles.cartItemHeader}>
@@ -238,10 +512,10 @@ const SalesScreen = ({ navigation }) => {
                 </View>
               )}
               <View style={styles.cartItemText}>
-                <Title style={styles.cartItemName} numberOfLines={2}>{item.name}</Title>
-                <Paragraph style={styles.cartItemCode}>Código: {item.code}</Paragraph>
+                <Title style={[styles.cartItemName, { color: theme.colors.onSurface }]} numberOfLines={2}>{item.name}</Title>
+                <Paragraph style={[styles.cartItemCode, { color: theme.colors.onSurfaceVariant }]}>Código: {item.code}</Paragraph>
                 {isBulkProduct && (
-                  <Paragraph style={styles.bulkInfo}>
+                  <Paragraph style={[styles.bulkInfo, { color: theme.colors.primary }]}>
                     ⚖️ ${unitPrice.toFixed(2)} por {unitLabel}
                   </Paragraph>
                 )}
@@ -261,7 +535,7 @@ const SalesScreen = ({ navigation }) => {
           {/* Controles de cantidad */}
           <View style={styles.cartItemControls}>
             <View style={styles.quantitySection}>
-              <Paragraph style={styles.quantityLabel}>Cantidad:</Paragraph>
+              <Paragraph style={[styles.quantityLabel, { color: theme.colors.onSurfaceVariant }]}>Cantidad:</Paragraph>
               <View style={styles.quantityControls}>
                 <Button 
                   mode="outlined" 
@@ -278,18 +552,19 @@ const SalesScreen = ({ navigation }) => {
                 >
                   -
                 </Button>
-                <View style={styles.quantityInputContainer}>
+                <View style={[styles.quantityInputContainer, { backgroundColor: theme.colors.surfaceContainer }]}>
                   <TextInput
                     value={displayQuantity.toString()}
                     onChangeText={(text) => {
                       const value = parseFloat(text) || 0;
                       updateQuantity(item.id, value);
                     }}
-                    style={styles.quantityInput}
+                    style={[styles.quantityInput, { color: theme.colors.onSurface }]}
                     keyboardType="numeric"
                     placeholder={isBulkProduct ? "0.0" : "0"}
+                    placeholderTextColor={theme.colors.onSurfaceVariant}
                   />
-                  <Paragraph style={styles.unitLabel}>{unitLabel}</Paragraph>
+                  <Paragraph style={[styles.unitLabel, { color: theme.colors.onSurfaceVariant }]}>{unitLabel}</Paragraph>
                 </View>
                 <Button 
                   mode="outlined" 
@@ -311,12 +586,12 @@ const SalesScreen = ({ navigation }) => {
 
             {/* Precio total del item */}
             <View style={styles.priceSection}>
-              <Paragraph style={styles.priceLabel}>Total:</Paragraph>
-              <Title style={styles.itemTotal}>
+              <Paragraph style={[styles.priceLabel, { color: theme.colors.onSurfaceVariant }]}>Total:</Paragraph>
+              <Title style={[styles.itemTotal, { color: theme.colors.tertiary }]}>
                 ${item.price.toFixed(2)}
               </Title>
               {isBulkProduct && (
-                <Paragraph style={styles.bulkCalculation}>
+                <Paragraph style={[styles.bulkCalculation, { color: theme.colors.onSurfaceVariant }]}>
                   {item.weight.toFixed(2)} {unitLabel} × ${unitPrice.toFixed(2)}
                 </Paragraph>
               )}
@@ -329,43 +604,42 @@ const SalesScreen = ({ navigation }) => {
 
   return (
     <KeyboardAvoidingView 
-      style={styles.container} 
+      style={[styles.container, { backgroundColor: theme.colors.background }]} 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
       {/* Header con búsqueda */}
-      <View style={styles.header}>
-        <TextInput
-          placeholder="Buscar productos..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          style={styles.searchInput}
-          mode="outlined"
-        />
-        <Button 
-          mode="contained" 
-          onPress={searchProducts}
-          style={styles.searchButton}
-          icon="magnify"
-        >
-          Buscar
-        </Button>
-        <Button 
-          mode="contained" 
-          onPress={() => navigation.navigate('Scanner')}
-          style={styles.scannerButton}
-          icon="qrcode-scan"
-        >
-          Escáner Dedicado
-        </Button>
-        <Button 
-          mode="outlined" 
-          onPress={() => setShowScanner(true)}
-          style={styles.toggleButton}
-          icon="camera-alt"
-        >
-          Escáner Rápido
-        </Button>
+      <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
+        {/* Indicador de conexión y ventas pendientes */}
+        <View style={styles.connectionIndicator}>
+          <View style={[styles.statusDot, { backgroundColor: isOnline ? '#4CAF50' : '#f44336' }]} />
+          <Paragraph style={{ color: theme.colors.onSurface, fontSize: 12 }}>
+            {isOnline ? 'En línea' : 'Sin conexión'}
+          </Paragraph>
+          {pendingSalesCount > 0 && (
+            <Badge style={[styles.pendingBadge, { backgroundColor: '#FF9800' }]}>
+              {pendingSalesCount}
+            </Badge>
+          )}
+        </View>
+
+        <View style={styles.searchContainer}>
+          <TextInput
+            placeholder="Buscar productos..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            style={styles.searchInput}
+            mode="outlined"
+          />
+          <Button 
+            mode="contained" 
+            onPress={searchProducts}
+            style={styles.searchButton}
+            icon="magnify"
+          >
+            Buscar
+          </Button>
+        </View>
       </View>
 
       {/* Carrito de compras */}
@@ -391,89 +665,124 @@ const SalesScreen = ({ navigation }) => {
 
       {/* Totales y pago */}
       {cart.length > 0 && (
-        <Card style={[styles.totalsCard, styles.paymentSection]}>
+        <Card style={[styles.totalsCard, styles.paymentSection, { backgroundColor: theme.colors.surface }]}>
           <Card.Content>
-            <View style={styles.totalsRow}>
-              <Paragraph>Subtotal:</Paragraph>
-              <Paragraph>${subtotal.toFixed(2)}</Paragraph>
-            </View>
-            <View style={styles.totalsRow}>
-              <Paragraph>IVA (16%):</Paragraph>
-              <Paragraph>${taxAmount.toFixed(2)}</Paragraph>
-            </View>
-            <Divider style={styles.divider} />
-            <View style={styles.totalsRow}>
-              <Title>Total:</Title>
-              <Title>${total.toFixed(2)}</Title>
-            </View>
-            
-            <TextInput
-              label="Nombre del cliente"
-              value={customerName}
-              onChangeText={setCustomerName}
-              style={styles.customerInput}
-              mode="outlined"
-            />
-            
-            <View style={styles.paymentMethods}>
-              <Button 
-                mode={paymentMethod === 'efectivo' ? 'contained' : 'outlined'}
-                onPress={() => setPaymentMethod('efectivo')}
-                style={styles.paymentButton}
-              >
-                Efectivo
-              </Button>
-              <Button 
-                mode={paymentMethod === 'tarjeta' ? 'contained' : 'outlined'}
-                onPress={() => setPaymentMethod('tarjeta')}
-                style={styles.paymentButton}
-              >
-                Tarjeta
-              </Button>
-            </View>
-            
-            {paymentMethod === 'efectivo' && (
-              <TextInput
-                label="Efectivo recibido"
-                value={cashReceived}
-                onChangeText={setCashReceived}
-                keyboardType="numeric"
-                style={styles.cashInput}
-                mode="outlined"
-              />
-            )}
-            
-            {paymentMethod === 'efectivo' && cashReceived && change > 0 && (
-              <View style={styles.changeRow}>
-                <Paragraph>Cambio:</Paragraph>
-                <Paragraph style={styles.changeAmount}>${change.toFixed(2)}</Paragraph>
+            {!showPaymentDetails ? (
+              // Vista simple: Solo total y botón Pagar
+              <View style={styles.simplePaymentView}>
+                <View style={styles.simpleTotalsRow}>
+                  <Title style={{ color: theme.colors.onSurface, fontSize: 16 }}>Total a pagar:</Title>
+                  <Title style={{ color: theme.colors.primary, fontSize: 20 }}>${total.toFixed(2)}</Title>
+                </View>
+                <Button
+                  mode="contained"
+                  onPress={handlePayButton}
+                  style={styles.payButton}
+                  buttonColor={theme.colors.primary}
+                  textColor={theme.colors.onPrimary}
+                  icon="credit-card"
+                >
+                  Pagar
+                </Button>
+              </View>
+            ) : (
+              // Vista completa: Desglose y campos de pago
+              <View style={styles.fullPaymentView}>
+                <View style={styles.totalsRow}>
+                  <Paragraph style={{ color: theme.colors.onSurface }}>Subtotal:</Paragraph>
+                  <Paragraph style={{ color: theme.colors.onSurface }}>${subtotal.toFixed(2)}</Paragraph>
+                </View>
+                <View style={styles.totalsRow}>
+                  <Paragraph style={{ color: theme.colors.onSurface }}>IVA (16%):</Paragraph>
+                  <Paragraph style={{ color: theme.colors.onSurface }}>${taxAmount.toFixed(2)}</Paragraph>
+                </View>
+                <Divider style={styles.divider} />
+                <View style={styles.totalsRow}>
+                  <Title style={{ color: theme.colors.onSurface }}>Total:</Title>
+                  <Title style={{ color: theme.colors.primary }}>${total.toFixed(2)}</Title>
+                </View>
+                
+                <TextInput
+                  label="Nombre del cliente"
+                  value={customerName}
+                  onChangeText={setCustomerName}
+                  style={styles.customerInput}
+                  mode="outlined"
+                  placeholderTextColor={theme.colors.onSurfaceVariant}
+                  theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
+                />
+                
+                <View style={styles.paymentMethods}>
+                  <Button 
+                    mode={paymentMethod === 'efectivo' ? 'contained' : 'outlined'}
+                    onPress={() => setPaymentMethod('efectivo')}
+                    style={styles.paymentButton}
+                    buttonColor={paymentMethod === 'efectivo' ? theme.colors.primary : undefined}
+                    textColor={paymentMethod === 'efectivo' ? theme.colors.onPrimary : theme.colors.primary}
+                    theme={{ colors: { outline: theme.colors.outline } }}
+                  >
+                    Efectivo
+                  </Button>
+                  <Button 
+                    mode={paymentMethod === 'tarjeta' ? 'contained' : 'outlined'}
+                    onPress={() => setPaymentMethod('tarjeta')}
+                    style={styles.paymentButton}
+                    buttonColor={paymentMethod === 'tarjeta' ? theme.colors.primary : undefined}
+                    textColor={paymentMethod === 'tarjeta' ? theme.colors.onPrimary : theme.colors.primary}
+                    theme={{ colors: { outline: theme.colors.outline } }}
+                  >
+                    Tarjeta
+                  </Button>
+                </View>
+                
+                {paymentMethod === 'efectivo' && (
+                  <TextInput
+                    label="Efectivo recibido"
+                    value={cashReceived}
+                    onChangeText={setCashReceived}
+                    keyboardType="numeric"
+                    style={styles.cashInput}
+                    mode="outlined"
+                    placeholderTextColor={theme.colors.onSurfaceVariant}
+                    theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
+                  />
+                )}
+                
+                {paymentMethod === 'efectivo' && cashReceived && change > 0 && (
+                  <View style={styles.changeRow}>
+                    <Paragraph style={{ color: theme.colors.onSurface }}>Cambio:</Paragraph>
+                    <Paragraph style={[styles.changeAmount, { color: theme.colors.primary }]}>${change.toFixed(2)}</Paragraph>
+                  </View>
+                )}
+                
+                <View style={styles.paymentActions}>
+                  <Button 
+                    mode="outlined" 
+                    onPress={handleAddMoreProducts}
+                    style={styles.addMoreButton}
+                    textColor={theme.colors.secondary}
+                    theme={{ colors: { outline: theme.colors.secondary } }}
+                    icon={() => <MaterialIcons name="add-shopping-cart" size={20} color={theme.colors.primary} />}
+                  >
+                    Agregar más productos
+                  </Button>
+                  
+                  <Button 
+                    mode="contained" 
+                    onPress={processSale}
+                    style={styles.processButton}
+                    buttonColor={theme.colors.tertiary}
+                    textColor={theme.colors.onTertiary}
+                    icon="check"
+                  >
+                    Procesar Venta
+                  </Button>
+                </View>
               </View>
             )}
-            
-            <Button 
-              mode="contained" 
-              onPress={processSale}
-              style={styles.processButton}
-              icon="check"
-            >
-              Procesar Venta
-            </Button>
           </Card.Content>
         </Card>
       )}
-
-      {/* Modal del escáner */}
-      <Modal
-        visible={showScanner}
-        animationType="slide"
-        onRequestClose={() => setShowScanner(false)}
-      >
-        {/* Comentado para Expo Go - usar solo escáner simulado */}
-        <BarcodeScanner 
-          onScan={handleBarcodeScanned}
-          onClose={() => setShowScanner(false)}
-        />
-      </Modal>
 
       {/* Modal para ingresar peso de productos a granel */}
       <Modal
@@ -524,6 +833,27 @@ const SalesScreen = ({ navigation }) => {
           </Card.Content>
         </Card>
       </Modal>
+
+      {/* FAB para el escáner */}
+      <FAB
+        icon={() => <MaterialIcons name="qr-code-scanner" size={24} color="#fff" />}
+        style={[styles.fab, { backgroundColor: theme.colors.primary, bottom: 80 }]}
+        onPress={() => setShowScanner(true)}
+      />
+
+
+      {/* Modal del escáner QR */}
+      {showScanner && (
+        <QRCodeScanner
+          visible={showScanner}
+          onScan={handleQRScan}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
+
+      {/* Asistente para Cajero */}
+      <CashierAssistant total={total} cart={cart} todayStats={todayStats} products={products} />
+
     </KeyboardAvoidingView>
   );
 };
@@ -535,10 +865,30 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   header: {
-    flexDirection: 'row',
     padding: 8,
     backgroundColor: '#fff',
     elevation: 1,
+  },
+  connectionIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  pendingBadge: {
+    marginLeft: 8,
+    minWidth: 20,
+    height: 20,
+  },
+  searchContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
   searchInput: {
@@ -729,6 +1079,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginVertical: 1,
   },
+  // Estilo específico para la vista simple
+  simpleTotalsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginVertical: 4,
+    alignItems: 'center',
+  },
   divider: {
     marginVertical: 1,
   },
@@ -837,6 +1194,40 @@ const styles = StyleSheet.create({
   },
   addWeightButton: {
     backgroundColor: '#ff9800',
+  },
+  // Nuevos estilos para la vista de pagos mejorada
+  simplePaymentView: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  fullPaymentView: {
+    // Los estilos existentes se mantienen
+  },
+  payButton: {
+    marginTop: 10,
+    paddingHorizontal: 25,
+    paddingVertical: 4,
+    borderRadius: 15,
+    minWidth: 100,
+  },
+  paymentActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+    gap: 10,
+  },
+  addMoreButton: {
+    flex: 1,
+    marginRight: 5,
+  },
+  scannerButton: {
+    flex: 1,
+    marginLeft: 5,
+  },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 100,
   },
 });
 

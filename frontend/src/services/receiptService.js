@@ -28,6 +28,7 @@ export const receiptService = {
 Venta #: ${safeData.sale_number}
 Fecha: ${new Date(safeData.created_at).toLocaleString('es-MX')}
 Cliente: ${safeData.customer_name}
+${safeData.cashier_name ? `Cajero: ${safeData.cashier_name}` : ''}
 
 ───────────────────────────────────────
 PRODUCTOS:
@@ -58,6 +59,8 @@ Cambio: $${safeData.change.toFixed(2)}` : ''}
       const receiptId = `receipt_${safeData.sale_number}_${Date.now()}`;
       const receiptData = {
         id: receiptId,
+        user_id: saleData.user_id, // Agregar user_id al comprobante
+        cashier_name: saleData.cashier_name, // Agregar nombre del cajero
         sale_number: safeData.sale_number,
         created_at: safeData.created_at,
         total: safeData.total,
@@ -92,10 +95,17 @@ Cambio: $${safeData.change.toFixed(2)}` : ''}
   },
 
   // Obtener todos los comprobantes guardados
-  getAllReceipts: async () => {
+  getAllReceipts: async (filterByUserId = null) => {
     try {
       const receipts = await AsyncStorage.getItem('receipts');
-      return receipts ? JSON.parse(receipts) : [];
+      const allReceipts = receipts ? JSON.parse(receipts) : [];
+      
+      // Filtrar por user_id si se proporciona
+      if (filterByUserId) {
+        return allReceipts.filter(receipt => receipt.user_id === filterByUserId);
+      }
+      
+      return allReceipts;
     } catch (error) {
       console.error('Error obteniendo comprobantes:', error);
       return [];

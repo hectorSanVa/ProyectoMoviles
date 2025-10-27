@@ -3,25 +3,36 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { Provider as PaperProvider } from 'react-native-paper';
 
-// Importar el contexto de autenticación
+// Importar los contextos
 import { AuthProvider } from './src/context/AuthContext';
-// Importar el contexto del carrito
 import { CartProvider } from './src/context/CartContext';
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 
 // Importar la navegación principal
 import AppNavigator from './src/navigation/AppNavigator';
 
-export default function App() {
+// Componente interno que usa el tema
+function AppContent() {
+  const { theme, isDarkMode } = useTheme();
+  
   return (
-    <PaperProvider>
+    <PaperProvider theme={theme}>
       <AuthProvider>
         <CartProvider>
           <NavigationContainer>
-            <StatusBar style="auto" />
+            <StatusBar style={isDarkMode ? "light" : "dark"} />
             <AppNavigator />
           </NavigationContainer>
         </CartProvider>
       </AuthProvider>
     </PaperProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
   );
 }

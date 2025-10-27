@@ -1,5 +1,5 @@
 {
-  "expo": {
+    "expo": {
     "name": "Sistema Inventario",
     "slug": "sistema-inventario",
     "version": "1.0.0",
@@ -15,23 +15,24 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.inventario.app"
+      "bundleIdentifier": "com.inventario.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Esta app necesita acceso a la cámara para escanear códigos de barras y QR."
+      }
     },
     "android": {
       "package": "com.inventario.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      },
       "permissions": [
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "WRITE_EXTERNAL_STORAGE"
       ]
     },
     "web": {},
-    "plugins": [
-      "expo-barcode-scanner"
-    ],
+    "plugins": [],
     "extra": {
       "eas": {
         "projectId": "de64d617-98ca-4617-a0e2-a33ee2483032"

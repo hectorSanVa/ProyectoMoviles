@@ -1,17 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, FlatList, RefreshControl, Modal, Image, Alert } from 'react-native';
-import { Card, Title, Paragraph, Button, Searchbar, Chip, TextInput } from 'react-native-paper';
+import { Card, Title, Paragraph, Button, Searchbar, Chip, TextInput, FAB } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import { productService } from '../services/productService';
+import { discountService } from '../services/discountService';
 import { useCart } from '../context/CartContext';
-import BarcodeScanner from '../components/BarcodeScanner';
+import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { isProductOnSale, getFinalPrice, getDiscountBadge } from '../utils/promotionUtils';
 
 const ProductsScreen = ({ navigation }) => {
+  const { theme } = useTheme();
+  const { role } = useAuth(); // Para saber si es admin
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showScanner, setShowScanner] = useState(false);
   const [showWeightModal, setShowWeightModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [weightInput, setWeightInput] = useState('');
@@ -51,20 +55,114 @@ const ProductsScreen = ({ navigation }) => {
   const loadProducts = async () => {
     try {
       setLoading(true);
-      // Cargar todos los productos sin filtro de búsqueda
+      // Cargar todos los productos
       const response = await productService.getAll();
       if (response.success) {
         console.log('🔄 ProductsScreen: Refrescando productos...');
         console.log('📦 Productos cargados:', response.data.length);
         
-        // Log detallado del stock de productos a granel
-        response.data.forEach(product => {
-          if (product.sale_type === 'weight') {
-            console.log(`📦 Producto a granel ${product.name}: stock_in_units=${product.stock_in_units}, stock=${product.stock}`);
+        // Cargar y aplicar descuentos
+        try {
+          const discountsResponse = await discountService.getActive();
+          let discountsArray = [];
+          if (Array.isArray(discountsResponse)) {
+            discountsArray = discountsResponse;
+          } else if (discountsResponse && discountsResponse.data) {
+            discountsArray = discountsResponse.data;
           }
-        });
-        
-        setProducts(response.data);
+          
+          console.log('🎫 Descuentos activos:', discountsArray.length);
+          console.log('🎫 Lista de descuentos:', JSON.stringify(discountsArray, null, 2));
+          
+          // Aplicar descuentos a productos
+          const productsWithDiscounts = response.data.map(product => {
+            console.log(`🔍 Procesando producto: ${product.name} (ID: ${product.id}, Categoria ID: ${product.category_id})`);
+            const productDiscount = discountsArray.find(
+              discount => {
+                const matches = discount.discount_type === 'product' && 
+                              discount.target_id === product.id;
+                if (matches) {
+                  console.log(`✅ Descuento por producto encontrado para ${product.name}`);
+                }
+                return matches;
+              }
+            );
+            
+            const categoryDiscount = discountsArray.find(
+              discount => {
+                const matches = discount.discount_type === 'category' && 
+                               discount.target_id === product.category_id;
+                if (matches) {
+                  console.log(`🎫 Descuento por categoría encontrado para ${product.name}:`, {
+                    product_category_id: product.category_id,
+                    discount_target_id: discount.target_id,
+                    discount_percentage: discount.discount_percentage
+                  });
+                }
+                return matches;
+              }
+            );
+            
+            const globalDiscount = discountsArray.find(
+              discount => {
+                if (discount.discount_type === 'global') {
+                  console.log(`🎫 Descuento global encontrado para ${product.name}`);
+                }
+                return discount.discount_type === 'global';
+              }
+            );
+            
+            const activeDiscount = productDiscount || categoryDiscount || globalDiscount;
+            
+            if (activeDiscount) {
+              const discountPercentage = parseFloat(activeDiscount.discount_percentage);
+              let originalPrice;
+              if (product.sale_type === 'weight') {
+                originalPrice = product.price_per_unit || 0;
+              } else {
+                originalPrice = product.sale_price || 0;
+              }
+              
+              const discountAmount = (originalPrice * discountPercentage) / 100;
+              const finalPrice = originalPrice - discountAmount;
+              
+              return {
+                ...product,
+                discounted_price: finalPrice,
+                discount_percentage: discountPercentage,
+                has_discount: true,
+                original_price: originalPrice,
+                discount_type: activeDiscount.discount_type
+              };
+            }
+            
+            return product;
+          });
+          
+          // Filtrar productos según búsqueda
+          let filteredProducts = productsWithDiscounts;
+          if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            filteredProducts = productsWithDiscounts.filter(product => 
+              product.name?.toLowerCase().includes(query) ||
+              product.code?.toLowerCase().includes(query) ||
+              product.category_name?.toLowerCase().includes(query)
+            );
+            console.log(`🔍 Filtrados ${filteredProducts.length} productos por: "${searchQuery}"`);
+          }
+          
+          // Log detallado del stock de productos a granel
+          filteredProducts.forEach(product => {
+            if (product.sale_type === 'weight') {
+              console.log(`📦 Producto a granel ${product.name}: stock_in_units=${product.stock_in_units}, stock=${product.stock}`);
+            }
+          });
+          
+          setProducts(filteredProducts);
+        } catch (error) {
+          console.error('Error cargando descuentos:', error);
+          setProducts(response.data);
+        }
       }
     } catch (error) {
       console.error('Error cargando productos:', error);
@@ -81,16 +179,17 @@ const ProductsScreen = ({ navigation }) => {
 
   const handleSearch = (query) => {
     setSearchQuery(query);
-    loadProducts();
   };
+  
+  // Recargar productos cuando cambie la búsqueda
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      loadProducts();
+    }, 500);
+    
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
 
-  const handleBarcodeScanned = (barcode) => {
-    console.log('Código escaneado:', barcode);
-    // Buscar producto por código
-    setSearchQuery(barcode);
-    loadProducts();
-    setShowScanner(false);
-  };
 
   const handleAddToCart = (product) => {
     const success = addToCart(product, null, handleShowWeightModal);
@@ -124,39 +223,58 @@ const ProductsScreen = ({ navigation }) => {
     }
   };
 
-  const openScanner = () => {
-    setShowScanner(true);
-  };
-
-  const closeScanner = () => {
-    setShowScanner(false);
-  };
 
   const renderProduct = ({ item }) => {
     console.log('Producto renderizado:', item.name, 'Image URL:', item.image_url);
     return (
-      <Card style={styles.productCard}>
+      <Card style={[styles.productCard, { backgroundColor: theme.colors.surface }]}>
         <Card.Content>
           <View style={styles.productHeader}>
             <View style={styles.productInfo}>
               {item.image_url ? (
                 <Image source={{ uri: item.image_url }} style={styles.productImage} />
               ) : (
-                <View style={[styles.productImage, styles.noImagePlaceholder]}>
-                  <MaterialIcons name="image" size={24} color="#ccc" />
+                <View style={[styles.productImage, styles.noImagePlaceholder, { backgroundColor: theme.colors.surfaceVariant }]}>
+                  <MaterialIcons name="image" size={24} color={theme.colors.onSurfaceVariant} />
                 </View>
               )}
               <View style={styles.productText}>
-                <Title style={styles.productName}>{item.name}</Title>
-                <Paragraph style={styles.productCode}>Código: {item.code}</Paragraph>
-                <Paragraph style={styles.productPrice}>
-                  Precio: ${item.sale_type === 'weight' ? `${item.price_per_unit}/${item.unit_of_measure || 'kg'}` : item.sale_price}
-                </Paragraph>
+                <View style={styles.productNameRow}>
+                  <Title style={[styles.productName, { color: theme.colors.onSurface }]}>{item.name}</Title>
+                  {isProductOnSale(item) && (
+                    <Chip
+                      style={[styles.discountChip, { backgroundColor: theme.colors.error }]}
+                      textStyle={{ color: '#FFFFFF', fontWeight: 'bold' }}
+                    >
+                      {getDiscountBadge(item)}
+                    </Chip>
+                  )}
+                </View>
+                <Paragraph style={[styles.productCode, { color: theme.colors.onSurfaceVariant }]}>Código: {item.code}</Paragraph>
+                <View style={styles.priceRow}>
+                  {isProductOnSale(item) && (
+                    <Paragraph style={[styles.originalPrice, { color: theme.colors.onSurfaceVariant }]}>
+                      ${item.sale_type === 'weight' ? item.price_per_unit : item.sale_price}
+                    </Paragraph>
+                  )}
+                  <Paragraph style={[styles.productPrice, { color: isProductOnSale(item) ? theme.colors.error : theme.colors.primary }]}>
+                    Precio: ${item.sale_type === 'weight' 
+                      ? `${getFinalPrice(item).toFixed(2)}/${item.unit_of_measure || 'kg'}` 
+                      : getFinalPrice(item).toFixed(2)}
+                  </Paragraph>
+                </View>
               </View>
             </View>
           <Chip 
-            style={[styles.stockChip, { backgroundColor: (item.sale_type === 'weight' ? item.stock_in_units : item.stock) > item.min_stock ? '#4CAF50' : '#FF9800' }]}
-            textStyle={{ color: 'white' }}
+            style={[
+              styles.stockChip, 
+              { 
+                backgroundColor: (item.sale_type === 'weight' ? item.stock_in_units : item.stock) > item.min_stock 
+                  ? theme.colors.tertiary 
+                  : theme.colors.warning 
+              }
+            ]}
+            textStyle={{ color: theme.colors.onTertiary }}
           >
             Stock: {item.sale_type === 'weight' ? `${item.stock_in_units}${item.unit_of_measure || 'kg'}` : item.stock}
           </Chip>
@@ -171,7 +289,12 @@ const ProductsScreen = ({ navigation }) => {
           <Button
             mode="contained"
             onPress={() => handleAddToCart(item)}
-            style={[styles.addToCartButton, (item.sale_type === 'weight' ? item.stock_in_units <= 0 : item.stock <= 0) && styles.disabledButton]}
+            style={[
+              styles.addToCartButton, 
+              (item.sale_type === 'weight' ? item.stock_in_units <= 0 : item.stock <= 0) && styles.disabledButton
+            ]}
+            buttonColor={(item.sale_type === 'weight' ? item.stock_in_units <= 0 : item.stock <= 0) ? '#E53E3E' : theme.colors.tertiary}
+            textColor={(item.sale_type === 'weight' ? item.stock_in_units <= 0 : item.stock <= 0) ? '#FFFFFF' : theme.colors.onTertiary}
             icon="cart-plus"
             disabled={item.sale_type === 'weight' ? item.stock_in_units <= 0 : item.stock <= 0}
           >
@@ -184,24 +307,17 @@ const ProductsScreen = ({ navigation }) => {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.searchContainer}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View style={[styles.searchContainer, { backgroundColor: theme.colors.surface }]}>
         <Searchbar
           placeholder="Buscar productos..."
           onChangeText={handleSearch}
           value={searchQuery}
-          style={styles.searchBar}
+          style={[styles.searchBar, { backgroundColor: theme.colors.surfaceContainer }]}
+          inputStyle={{ color: theme.colors.onSurface }}
+          placeholderTextColor={theme.colors.onSurfaceVariant}
+          iconColor={theme.colors.onSurfaceVariant}
         />
-        <View style={styles.buttonRow}>
-          <Button
-            mode="contained"
-            onPress={openScanner}
-            style={styles.scannerButton}
-            icon="qrcode-scan"
-          >
-            Escanear
-          </Button>
-        </View>
       </View>
 
       <FlatList
@@ -209,31 +325,36 @@ const ProductsScreen = ({ navigation }) => {
         renderItem={renderProduct}
         keyExtractor={(item) => item.id.toString()}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            tintColor={theme.colors.primary}
+            colors={[theme.colors.primary]}
+            progressBackgroundColor={theme.colors.surface}
+          />
         }
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
-          <Card style={styles.emptyCard}>
+          <Card style={[styles.emptyCard, { backgroundColor: theme.colors.surface }]}>
             <Card.Content>
-              <Title>No hay productos</Title>
-              <Paragraph>Agrega productos para comenzar</Paragraph>
+              <Title style={{ color: theme.colors.onSurface }}>No hay productos</Title>
+              <Paragraph style={{ color: theme.colors.onSurfaceVariant }}>Agrega productos para comenzar</Paragraph>
             </Card.Content>
           </Card>
         }
       />
 
 
-      {/* Modal del escáner */}
-      <Modal
-        visible={showScanner}
-        animationType="slide"
-        onRequestClose={closeScanner}
-      >
-        <BarcodeScanner
-          onScan={handleBarcodeScanned}
-          onClose={closeScanner}
+
+      {/* FAB para admin: Crear producto */}
+      {role === 'admin' && (
+        <FAB
+          icon="plus"
+          style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+          onPress={() => navigation.navigate('ProductManagement')}
+          label="Nuevo"
         />
-      </Modal>
+      )}
 
       {/* Modal para ingresar peso de productos a granel */}
       <Modal
@@ -342,6 +463,27 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
+  productNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  discountChip: {
+    marginLeft: 8,
+    borderRadius: 12,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  originalPrice: {
+    fontSize: 14,
+    textDecorationLine: 'line-through',
+    marginRight: 8,
+  },
   productImage: {
     width: 60,
     height: 60,
@@ -358,11 +500,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   addToCartButton: {
-    backgroundColor: '#4CAF50',
+    // backgroundColor se maneja dinámicamente con buttonColor
     borderRadius: 8,
   },
   disabledButton: {
-    backgroundColor: '#ccc',
+    // backgroundColor se maneja dinámicamente con buttonColor
   },
   stockChip: {
     marginLeft: 10,
@@ -434,6 +576,12 @@ const styles = StyleSheet.create({
   },
   addWeightButton: {
     backgroundColor: '#ff9800',
+  },
+  fab: {
+    position: 'absolute',
+    margin: 16,
+    right: 0,
+    bottom: 0,
   },
 });
 

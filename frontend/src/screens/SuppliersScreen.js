@@ -3,8 +3,10 @@ import { View, StyleSheet, FlatList, RefreshControl, Alert } from 'react-native'
 import { Card, Title, Paragraph, Button, Searchbar, FAB, TextInput, IconButton } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import { supplierService } from '../services/supplierService';
+import { useTheme } from '../context/ThemeContext';
 
 const SuppliersScreen = () => {
+  const { theme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [suppliers, setSuppliers] = useState([]);
@@ -131,25 +133,25 @@ const SuppliersScreen = () => {
   };
 
   const renderSupplier = ({ item }) => (
-    <Card style={styles.supplierCard}>
+    <Card style={[styles.supplierCard, { backgroundColor: theme.colors.surface }]}>
       <Card.Content>
         <View style={styles.supplierHeader}>
           <View style={styles.supplierInfo}>
-            <Title style={styles.supplierName}>{item.name}</Title>
-            <Paragraph style={styles.contactPerson}>{item.contact_person}</Paragraph>
+            <Title style={[styles.supplierName, { color: theme.colors.onSurface }]}>{item.name}</Title>
+            <Paragraph style={[styles.contactPerson, { color: theme.colors.onSurfaceVariant }]}>{item.contact_person}</Paragraph>
           </View>
           <View style={styles.supplierActions}>
             <IconButton
               icon="pencil"
               size={20}
               onPress={() => openForm(item)}
-              iconColor="#2196F3"
+              iconColor={theme.colors.primary}
             />
             <IconButton
               icon="delete"
               size={20}
               onPress={() => handleDelete(item)}
-              iconColor="#F44336"
+              iconColor={theme.colors.error}
             />
           </View>
         </View>
@@ -157,20 +159,20 @@ const SuppliersScreen = () => {
         <View style={styles.supplierDetails}>
           {item.phone && (
             <View style={styles.detailRow}>
-              <MaterialIcons name="phone" size={16} color="#666" />
-              <Paragraph style={styles.detailText}>{item.phone}</Paragraph>
+              <MaterialIcons name="phone" size={16} color={theme.colors.onSurfaceVariant} />
+              <Paragraph style={[styles.detailText, { color: theme.colors.onSurfaceVariant }]}>{item.phone}</Paragraph>
             </View>
           )}
           {item.email && (
             <View style={styles.detailRow}>
-              <MaterialIcons name="email" size={16} color="#666" />
-              <Paragraph style={styles.detailText}>{item.email}</Paragraph>
+              <MaterialIcons name="email" size={16} color={theme.colors.onSurfaceVariant} />
+              <Paragraph style={[styles.detailText, { color: theme.colors.onSurfaceVariant }]}>{item.email}</Paragraph>
             </View>
           )}
           {item.address && (
             <View style={styles.detailRow}>
-              <MaterialIcons name="location-on" size={16} color="#666" />
-              <Paragraph style={styles.detailText}>{item.address}</Paragraph>
+              <MaterialIcons name="location-on" size={16} color={theme.colors.onSurfaceVariant} />
+              <Paragraph style={[styles.detailText, { color: theme.colors.onSurfaceVariant }]}>{item.address}</Paragraph>
             </View>
           )}
         </View>
@@ -185,14 +187,15 @@ const SuppliersScreen = () => {
 
   if (showForm) {
     return (
-      <View style={styles.container}>
-        <View style={styles.formHeader}>
-          <Title style={styles.formTitle}>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View style={[styles.formHeader, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.outline }]}>
+          <Title style={[styles.formTitle, { color: theme.colors.onSurface }]}>
             {editingSupplier ? 'Editar Proveedor' : 'Nuevo Proveedor'}
           </Title>
           <IconButton
             icon="close"
             size={24}
+            iconColor={theme.colors.onSurfaceVariant}
             onPress={closeForm}
           />
         </View>
@@ -202,7 +205,8 @@ const SuppliersScreen = () => {
             label="Nombre del Proveedor *"
             value={formData.name}
             onChangeText={(text) => setFormData({ ...formData, name: text })}
-            style={styles.input}
+            style={[styles.input, { backgroundColor: theme.colors.surfaceContainer }]}
+            theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
             mode="outlined"
           />
 
@@ -210,7 +214,8 @@ const SuppliersScreen = () => {
             label="Persona de Contacto *"
             value={formData.contact_person}
             onChangeText={(text) => setFormData({ ...formData, contact_person: text })}
-            style={styles.input}
+            style={[styles.input, { backgroundColor: theme.colors.surfaceContainer }]}
+            theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
             mode="outlined"
           />
 
@@ -218,7 +223,8 @@ const SuppliersScreen = () => {
             label="Teléfono"
             value={formData.phone}
             onChangeText={(text) => setFormData({ ...formData, phone: text })}
-            style={styles.input}
+            style={[styles.input, { backgroundColor: theme.colors.surfaceContainer }]}
+            theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
             mode="outlined"
             keyboardType="phone-pad"
           />
@@ -227,7 +233,8 @@ const SuppliersScreen = () => {
             label="Email"
             value={formData.email}
             onChangeText={(text) => setFormData({ ...formData, email: text })}
-            style={styles.input}
+            style={[styles.input, { backgroundColor: theme.colors.surfaceContainer }]}
+            theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
             mode="outlined"
             keyboardType="email-address"
           />
@@ -236,7 +243,8 @@ const SuppliersScreen = () => {
             label="Dirección"
             value={formData.address}
             onChangeText={(text) => setFormData({ ...formData, address: text })}
-            style={styles.input}
+            style={[styles.input, { backgroundColor: theme.colors.surfaceContainer }]}
+            theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
             mode="outlined"
             multiline
             numberOfLines={3}
@@ -247,6 +255,8 @@ const SuppliersScreen = () => {
               mode="outlined"
               onPress={closeForm}
               style={styles.cancelButton}
+              theme={{ colors: { outline: theme.colors.outline } }}
+              textColor={theme.colors.onSurfaceVariant}
             >
               Cancelar
             </Button>
@@ -254,6 +264,8 @@ const SuppliersScreen = () => {
               mode="contained"
               onPress={handleSave}
               style={styles.saveButton}
+              buttonColor={theme.colors.primary}
+              textColor={theme.colors.onPrimary}
             >
               {editingSupplier ? 'Actualizar' : 'Crear'}
             </Button>
@@ -264,13 +276,16 @@ const SuppliersScreen = () => {
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
         <Searchbar
           placeholder="Buscar proveedores..."
           onChangeText={handleSearch}
           value={searchQuery}
-          style={styles.searchBar}
+          style={[styles.searchBar, { backgroundColor: theme.colors.surfaceContainer }]}
+          inputStyle={{ color: theme.colors.onSurface }}
+          placeholderTextColor={theme.colors.onSurfaceVariant}
+          iconColor={theme.colors.onSurfaceVariant}
         />
       </View>
 
@@ -286,8 +301,9 @@ const SuppliersScreen = () => {
       />
 
       <FAB
-        style={styles.fab}
+        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
         icon="plus"
+        color={theme.colors.onPrimary}
         onPress={() => openForm()}
         label="Nuevo Proveedor"
       />

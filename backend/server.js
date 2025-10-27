@@ -16,7 +16,7 @@ app.use(helmet());
 
 // Configuración CORS más específica para aplicaciones móviles
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://192.168.1.83:3000', 'http://192.168.1.83:5000'],
+  origin: ['http://localhost:3000', 'http://localhost:5000', 'http://192.168.1.83:3000', 'http://192.168.1.83:5000', 'http://10.34.219.4:5000'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
@@ -60,6 +60,9 @@ app.use('/api/sales', require('./src/routes/sales'));
 app.use('/api/categories', require('./src/routes/categories'));
 app.use('/api/suppliers', require('./src/routes/suppliers'));
 app.use('/api/reports', require('./src/routes/reports'));
+app.use('/api/discounts', require('./src/routes/discounts'));
+app.use('/api/users', require('./src/routes/users'));
+app.use('/api/ai', require('./src/routes/ai'));
 
 // Middleware de manejo de errores
 app.use((err, req, res, next) => {
@@ -92,8 +95,9 @@ const startServer = async () => {
       console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
       console.log(`📱 API disponible en: http://localhost:${PORT}`);
       console.log(`📱 API disponible en: http://192.168.1.83:${PORT}`);
-      console.log(`🗄️  Base de datos: ${process.env.DB_NAME || 'inventario_db'}`);
-      console.log('✅ Servidor iniciado correctamente');
+    console.log(`📱 API disponible en: http://10.34.219.4:${PORT}`);
+    console.log(`🗄️  Base de datos: ${process.env.DB_NAME || 'inventario_db'}`);
+    console.log('✅ Servidor iniciado correctamente');
     });
   } catch (error) {
     console.error('❌ Error iniciando servidor:', error);

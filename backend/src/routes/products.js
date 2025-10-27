@@ -32,11 +32,17 @@ router.use(verifyToken);
 // GET /api/products - Obtener todos los productos
 router.get('/', productController.getAll);
 
-// GET /api/products/:id - Obtener producto por ID
-router.get('/:id', productController.getById);
+// GET /api/products/near-expiration - Obtener productos próximos a vencer
+router.get('/near-expiration', productController.getNearExpiration);
+
+// GET /api/products/expired - Obtener productos vencidos
+router.get('/expired', productController.getExpired);
 
 // GET /api/products/code/:code - Obtener producto por código
 router.get('/code/:code', productController.getByCode);
+
+// GET /api/products/:id - Obtener producto por ID
+router.get('/:id', productController.getById);
 
 // POST /api/products - Crear nuevo producto
 router.post('/', (req, res, next) => {

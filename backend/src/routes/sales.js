@@ -28,8 +28,14 @@ const verifyToken = (req, res, next) => {
 // Aplicar middleware a todas las rutas
 router.use(verifyToken);
 
+// GET /api/sales/summary/by-user - Resumen de ventas por usuario (solo admin)
+router.get('/summary/by-user', salesController.getSalesSummaryByUser);
+
 // GET /api/sales - Obtener ventas
 router.get('/', salesController.getAll);
+
+// GET /api/sales/user/:userId - Obtener ventas por usuario
+router.get('/user/:userId', salesController.getByUser);
 
 // GET /api/sales/:id - Obtener venta por ID con detalles
 router.get('/:id', salesController.getById);

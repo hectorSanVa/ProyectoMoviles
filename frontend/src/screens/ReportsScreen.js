@@ -4,14 +4,17 @@ import { Card, Title, Paragraph, Button, Chip, Divider, TextInput } from 'react-
 import { MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { reportsService } from '../services/reportsService';
+import { useTheme } from '../context/ThemeContext';
 
 const ReportsScreen = () => {
+  const { theme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [summary, setSummary] = useState(null);
   const [dailySales, setDailySales] = useState(null);
   const [topProducts, setTopProducts] = useState([]);
   const [lowStockProducts, setLowStockProducts] = useState([]);
+  
   // Usar fecha local en lugar de UTC
   const getLocalDate = () => {
     const now = new Date();
@@ -46,14 +49,14 @@ const ReportsScreen = () => {
       ]);
 
       console.log('📈 Resumen:', summaryRes);
-      console.log('📊 Ventas del día:', dailyRes);
+      console.log('📅 Ventas diarias:', dailyRes);
       console.log('🏆 Top productos:', topRes);
       console.log('⚠️ Stock bajo:', lowStockRes);
 
-      if (summaryRes.success) setSummary(summaryRes.data);
-      if (dailyRes.success) setDailySales(dailyRes.data);
-      if (topRes.success) setTopProducts(topRes.data);
-      if (lowStockRes.success) setLowStockProducts(lowStockRes.data);
+      setSummary(summaryRes.data);
+      setDailySales(dailyRes.data);
+      setTopProducts(topRes.data || []);
+      setLowStockProducts(lowStockRes.data || []);
     } catch (error) {
       console.error('❌ Error cargando reportes:', error);
       Alert.alert('Error', 'No se pudieron cargar los reportes');
@@ -69,12 +72,14 @@ const ReportsScreen = () => {
   };
 
   const formatCurrency = (amount) => {
-    return `$${parseFloat(amount).toFixed(2)}`;
+    const value = parseFloat(amount || 0);
+    if (isNaN(value)) return '$0.00';
+    return `$${value.toFixed(2)}`;
   };
 
   return (
     <ScrollView 
-      style={styles.container}
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
@@ -82,39 +87,41 @@ const ReportsScreen = () => {
       <View style={styles.content}>
         {/* Resumen General */}
         {summary && (
-          <Card style={styles.card}>
+          <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
             <Card.Content>
               <View style={styles.cardHeader}>
-                <Title style={styles.cardTitle}>Resumen General</Title>
+                <Title style={[styles.cardTitle, { color: theme.colors.onSurface }]}>Resumen General</Title>
                 <Button
                   mode="outlined"
                   onPress={loadReports}
                   style={styles.refreshButton}
                   icon="refresh"
+                  textColor={theme.colors.primary}
+                  buttonColor="transparent"
                 >
                   Actualizar
                 </Button>
               </View>
               <View style={styles.summaryGrid}>
-                <View style={styles.summaryItem}>
-                  <MaterialIcons name="shopping-cart" size={24} color="#4CAF50" />
-                  <Paragraph style={styles.summaryLabel}>Ventas Hoy</Paragraph>
-                  <Title style={styles.summaryValue}>{summary.daily_sales.total_sales}</Title>
+                <View style={[styles.summaryItem, { backgroundColor: theme.colors.surfaceContainer }]}>
+                  <MaterialIcons name="shopping-cart" size={24} color={theme.colors.tertiary} />
+                  <Paragraph style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>Ventas Hoy</Paragraph>
+                  <Title style={[styles.summaryValue, { color: theme.colors.onSurface }]}>{summary.daily_sales.total_sales}</Title>
                 </View>
-                <View style={styles.summaryItem}>
-                  <MaterialIcons name="attach-money" size={24} color="#2196F3" />
-                  <Paragraph style={styles.summaryLabel}>Ingresos</Paragraph>
-                  <Title style={styles.summaryValue}>{formatCurrency(summary.daily_sales.total_amount)}</Title>
+                <View style={[styles.summaryItem, { backgroundColor: theme.colors.surfaceContainer }]}>
+                  <MaterialIcons name="attach-money" size={24} color={theme.colors.primary} />
+                  <Paragraph style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>Ingresos</Paragraph>
+                  <Title style={[styles.summaryValue, { color: theme.colors.onSurface }]}>{formatCurrency(summary.daily_sales.total_amount)}</Title>
                 </View>
-                <View style={styles.summaryItem}>
-                  <MaterialIcons name="inventory" size={24} color="#FF9800" />
-                  <Paragraph style={styles.summaryLabel}>Productos</Paragraph>
-                  <Title style={styles.summaryValue}>{summary.total_products}</Title>
+                <View style={[styles.summaryItem, { backgroundColor: theme.colors.surfaceContainer }]}>
+                  <MaterialIcons name="inventory" size={24} color={theme.colors.secondary} />
+                  <Paragraph style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>Productos</Paragraph>
+                  <Title style={[styles.summaryValue, { color: theme.colors.onSurface }]}>{summary.total_products}</Title>
                 </View>
-                <View style={styles.summaryItem}>
-                  <MaterialIcons name="warning" size={24} color="#F44336" />
-                  <Paragraph style={styles.summaryLabel}>Stock Bajo</Paragraph>
-                  <Title style={styles.summaryValue}>{summary.low_stock_products}</Title>
+                <View style={[styles.summaryItem, { backgroundColor: theme.colors.surfaceContainer }]}>
+                  <MaterialIcons name="error" size={24} color={theme.colors.error} />
+                  <Paragraph style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>Stock Bajo</Paragraph>
+                  <Title style={[styles.summaryValue, { color: theme.colors.onSurface }]}>{summary.low_stock_count}</Title>
                 </View>
               </View>
             </Card.Content>
@@ -123,34 +130,45 @@ const ReportsScreen = () => {
 
         {/* Ventas del Día */}
         {dailySales && (
-          <Card style={styles.card}>
+          <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
             <Card.Content>
-              <Title style={styles.cardTitle}>Ventas del Día</Title>
+              <Title style={[styles.cardTitle, { color: theme.colors.onSurface }]}>Ventas del Día</Title>
               <View style={styles.salesInfo}>
-                <Paragraph>Total de ventas: {dailySales.total_sales}</Paragraph>
-                <Paragraph>Monto total: {formatCurrency(dailySales.total_amount)}</Paragraph>
-                <Paragraph>Promedio por venta: {formatCurrency(dailySales.average_sale)}</Paragraph>
+                <Paragraph style={[styles.salesText, { color: theme.colors.onSurfaceVariant }]}>
+                  Total de ventas: {dailySales.total_sales}
+                </Paragraph>
+                <Paragraph style={[styles.salesText, { color: theme.colors.onSurfaceVariant }]}>
+                  Monto total: {formatCurrency(dailySales.total_amount)}
+                </Paragraph>
+                <Paragraph style={[styles.salesText, { color: theme.colors.onSurfaceVariant }]}>
+                  Promedio por venta: {formatCurrency(dailySales.average_amount || 0)}
+                </Paragraph>
               </View>
             </Card.Content>
           </Card>
         )}
 
-        {/* Top Productos */}
+        {/* Productos Más Vendidos */}
         {topProducts.length > 0 && (
-          <Card style={styles.card}>
+          <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
             <Card.Content>
-              <Title style={styles.cardTitle}>Productos Más Vendidos</Title>
+              <Title style={[styles.cardTitle, { color: theme.colors.onSurface }]}>Productos Más Vendidos</Title>
               {topProducts.map((product, index) => (
-                <View key={product.code} style={styles.productItem}>
+                <View key={product.id || `top-${index}`} style={styles.productItem}>
                   <View style={styles.productInfo}>
-                    <Paragraph style={styles.productName}>{product.name}</Paragraph>
-                    <Paragraph style={styles.productCode}>Código: {product.code}</Paragraph>
+                    <Paragraph style={[styles.productName, { color: theme.colors.onSurface }]}>{product.name}</Paragraph>
+                    <Paragraph style={[styles.productCode, { color: theme.colors.onSurfaceVariant }]}>
+                      Código: {product.code}
+                    </Paragraph>
                   </View>
                   <View style={styles.productStats}>
-                    <Chip style={styles.quantityChip}>
+                    <Chip 
+                      style={[styles.quantityChip, { backgroundColor: theme.colors.tertiary }]}
+                      textStyle={{ color: theme.colors.onTertiary }}
+                    >
                       {product.total_quantity} vendidos
                     </Chip>
-                    <Paragraph style={styles.productRevenue}>
+                    <Paragraph style={[styles.productRevenue, { color: theme.colors.onSurface }]}>
                       {formatCurrency(product.total_revenue)}
                     </Paragraph>
                   </View>
@@ -162,23 +180,25 @@ const ReportsScreen = () => {
 
         {/* Stock Bajo */}
         {lowStockProducts.length > 0 && (
-          <Card style={styles.card}>
+          <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
             <Card.Content>
-              <Title style={styles.cardTitle}>Productos con Stock Bajo</Title>
-              {lowStockProducts.map((product) => (
-                <View key={product.id} style={styles.productItem}>
+              <Title style={[styles.cardTitle, { color: theme.colors.onSurface }]}>Productos con Stock Bajo</Title>
+              {lowStockProducts.map((product, index) => (
+                <View key={product.id || `low-${index}`} style={styles.productItem}>
                   <View style={styles.productInfo}>
-                    <Paragraph style={styles.productName}>{product.name}</Paragraph>
-                    <Paragraph style={styles.productCode}>Código: {product.code}</Paragraph>
+                    <Paragraph style={[styles.productName, { color: theme.colors.onSurface }]}>{product.name}</Paragraph>
+                    <Paragraph style={[styles.productCode, { color: theme.colors.onSurfaceVariant }]}>
+                      Código: {product.code}
+                    </Paragraph>
                   </View>
                   <View style={styles.productStats}>
                     <Chip 
-                      style={[styles.stockChip, { backgroundColor: '#F44336' }]}
-                      textStyle={{ color: 'white' }}
+                      style={[styles.stockChip, { backgroundColor: theme.colors.error }]}
+                      textStyle={{ color: theme.colors.onError }}
                     >
                       Stock: {product.stock}
                     </Chip>
-                    <Paragraph style={styles.minStock}>
+                    <Paragraph style={[styles.minStock, { color: theme.colors.onSurfaceVariant }]}>
                       Mín: {product.min_stock}
                     </Paragraph>
                   </View>
@@ -189,9 +209,9 @@ const ReportsScreen = () => {
         )}
 
         {loading && (
-          <Card style={styles.card}>
+          <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
             <Card.Content>
-              <Paragraph>Cargando reportes...</Paragraph>
+              <Paragraph style={{ color: theme.colors.onSurface }}>Cargando reportes...</Paragraph>
             </Card.Content>
           </Card>
         )}
@@ -203,7 +223,6 @@ const ReportsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
     paddingTop: 20,
   },
   content: {
@@ -213,6 +232,7 @@ const styles = StyleSheet.create({
   card: {
     marginBottom: 15,
     elevation: 2,
+    borderRadius: 12,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -223,7 +243,6 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#2c3e50',
     flex: 1,
   },
   refreshButton: {
@@ -238,22 +257,23 @@ const styles = StyleSheet.create({
     width: '48%',
     alignItems: 'center',
     padding: 10,
-    backgroundColor: '#f8f9fa',
     borderRadius: 8,
     marginBottom: 10,
   },
   summaryLabel: {
     fontSize: 12,
-    color: '#666',
     marginTop: 5,
   },
   summaryValue: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#2c3e50',
   },
   salesInfo: {
     marginTop: 10,
+  },
+  salesText: {
+    fontSize: 14,
+    marginBottom: 5,
   },
   productItem: {
     flexDirection: 'row',
@@ -272,26 +292,22 @@ const styles = StyleSheet.create({
   },
   productCode: {
     fontSize: 12,
-    color: '#666',
   },
   productStats: {
     alignItems: 'flex-end',
   },
   quantityChip: {
-    backgroundColor: '#4CAF50',
     marginBottom: 5,
   },
   productRevenue: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#2c3e50',
   },
   stockChip: {
     marginBottom: 5,
   },
   minStock: {
     fontSize: 12,
-    color: '#666',
   },
 });
 

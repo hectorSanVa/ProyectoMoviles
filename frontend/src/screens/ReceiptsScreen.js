@@ -11,8 +11,12 @@ import {
 } from 'react-native';
 import { Card, Title, Paragraph, Button, FAB, Portal, Modal } from 'react-native-paper';
 import { receiptService } from '../services/receiptService';
+import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 
 const ReceiptsScreen = () => {
+  const { theme } = useTheme();
+  const { user } = useAuth(); // Obtener el usuario actual
   const [receipts, setReceipts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState(null);
@@ -28,7 +32,9 @@ const ReceiptsScreen = () => {
   const loadReceipts = async () => {
     try {
       setLoading(true);
-      const receiptsData = await receiptService.getAllReceipts();
+      // Si el usuario es cajero, filtrar por su user_id; si es admin, mostrar todos
+      const filterByUserId = user.role === 'cajero' ? user.id : null;
+      const receiptsData = await receiptService.getAllReceipts(filterByUserId);
       // Ordenar por fecha más reciente
       const sortedReceipts = receiptsData.sort((a, b) => b.timestamp - a.timestamp);
       setReceipts(sortedReceipts);
@@ -107,13 +113,18 @@ const ReceiptsScreen = () => {
   };
 
   const renderReceipt = ({ item }) => (
-    <Card style={styles.receiptCard}>
+    <Card style={[styles.receiptCard, { backgroundColor: theme.colors.surface }]}>
       <Card.Content>
-        <Title style={styles.receiptTitle}>Venta #{item.sale_number}</Title>
-        <Paragraph style={styles.receiptDate}>
+        <Title style={[styles.receiptTitle, { color: theme.colors.onSurface }]}>Venta #{item.sale_number}</Title>
+        <Paragraph style={[styles.receiptDate, { color: theme.colors.onSurfaceVariant }]}>
           {formatDate(item.created_at)}
         </Paragraph>
-        <Paragraph style={styles.receiptTotal}>
+        {item.cashier_name && (
+          <Paragraph style={[styles.cashierName, { color: theme.colors.onSurfaceVariant }]}>
+            Cajero: {item.cashier_name}
+          </Paragraph>
+        )}
+        <Paragraph style={[styles.receiptTotal, { color: theme.colors.primary }]}>
           Total: ${Number(item.total).toFixed(2)}
         </Paragraph>
       </Card.Content>
@@ -122,33 +133,40 @@ const ReceiptsScreen = () => {
           mode="contained" 
           onPress={() => showReceipt(item)}
           style={styles.viewButton}
+          buttonColor={theme.colors.primary}
+          textColor={theme.colors.onPrimary}
         >
           Ver
         </Button>
-        <Button 
-          mode="outlined" 
-          onPress={() => deleteReceipt(item.id)}
-          style={styles.deleteButton}
-        >
-          Eliminar
-        </Button>
+        {/* Solo admin puede eliminar comprobantes */}
+        {user.role === 'admin' && (
+          <Button 
+            mode="outlined" 
+            onPress={() => deleteReceipt(item.id)}
+            style={styles.deleteButton}
+            textColor={theme.colors.error}
+            theme={{ colors: { outline: theme.colors.error } }}
+          >
+            Eliminar
+          </Button>
+        )}
       </Card.Actions>
     </Card>
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Title style={styles.headerTitle}>Comprobantes</Title>
-        <Paragraph style={styles.headerSubtitle}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
+        <Title style={[styles.headerTitle, { color: theme.colors.onSurface }]}>Comprobantes</Title>
+        <Paragraph style={[styles.headerSubtitle, { color: theme.colors.onSurfaceVariant }]}>
           {receipts.length} comprobante{receipts.length !== 1 ? 's' : ''} guardado{receipts.length !== 1 ? 's' : ''}
         </Paragraph>
       </View>
 
       {receipts.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No hay comprobantes guardados</Text>
-          <Text style={styles.emptySubtext}>
+          <Text style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>No hay comprobantes guardados</Text>
+          <Text style={[styles.emptySubtext, { color: theme.colors.onSurfaceVariant }]}>
             Los comprobantes se guardan automáticamente al realizar ventas
           </Text>
         </View>
@@ -158,15 +176,22 @@ const ReceiptsScreen = () => {
           renderItem={renderReceipt}
           keyExtractor={(item) => item.id}
           refreshControl={
-            <RefreshControl refreshing={loading} onRefresh={loadReceipts} />
+            <RefreshControl 
+              refreshing={loading} 
+              onRefresh={loadReceipts}
+              tintColor={theme.colors.primary}
+              colors={[theme.colors.primary]}
+              progressBackgroundColor={theme.colors.surface}
+            />
           }
           contentContainerStyle={styles.listContainer}
         />
       )}
 
-      {receipts.length > 0 && (
+      {/* FAB solo para admin */}
+      {receipts.length > 0 && user.role === 'admin' && (
         <FAB
-          style={styles.clearFab}
+          style={[styles.clearFab, { backgroundColor: theme.colors.error }]}
           icon="delete-sweep"
           label="Limpiar Todo"
           onPress={clearAllReceipts}
@@ -178,14 +203,14 @@ const ReceiptsScreen = () => {
         <Modal
           visible={showModal}
           onDismiss={() => setShowModal(false)}
-          contentContainerStyle={styles.modalContainer}
+          contentContainerStyle={[styles.modalContainer, { backgroundColor: theme.colors.surface }]}
         >
           <View style={styles.modalContent}>
-            <Title style={styles.modalTitle}>
+            <Title style={[styles.modalTitle, { color: theme.colors.onSurface }]}>
               Comprobante #{selectedReceipt?.sale_number}
             </Title>
-            <View style={styles.receiptContent}>
-              <Text style={styles.receiptText}>
+            <View style={[styles.receiptContent, { backgroundColor: theme.colors.surfaceContainer }]}>
+              <Text style={[styles.receiptText, { color: theme.colors.onSurface }]}>
                 {selectedReceipt?.receiptText}
               </Text>
             </View>
@@ -193,6 +218,8 @@ const ReceiptsScreen = () => {
               mode="contained"
               onPress={() => setShowModal(false)}
               style={styles.closeButton}
+              buttonColor={theme.colors.primary}
+              textColor={theme.colors.onPrimary}
             >
               Cerrar
             </Button>
@@ -206,10 +233,8 @@ const ReceiptsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   header: {
-    backgroundColor: '#fff',
     padding: 20,
     paddingTop: 10,
     borderBottomWidth: 1,
@@ -218,11 +243,9 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
   },
   headerSubtitle: {
     fontSize: 14,
-    color: '#666',
     marginTop: 4,
   },
   listContainer: {
@@ -231,28 +254,31 @@ const styles = StyleSheet.create({
   receiptCard: {
     marginBottom: 12,
     elevation: 2,
+    borderRadius: 12,
   },
   receiptTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
   },
   receiptDate: {
     fontSize: 14,
-    color: '#666',
     marginTop: 4,
+  },
+  cashierName: {
+    fontSize: 13,
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   receiptTotal: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#2e7d32',
     marginTop: 8,
   },
   viewButton: {
     marginRight: 8,
   },
   deleteButton: {
-    borderColor: '#d32f2f',
+    // borderColor se maneja dinámicamente
   },
   emptyContainer: {
     flex: 1,
@@ -263,13 +289,11 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#666',
     textAlign: 'center',
     marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#999',
     textAlign: 'center',
   },
   clearFab: {
@@ -277,12 +301,10 @@ const styles = StyleSheet.create({
     margin: 16,
     right: 0,
     bottom: 0,
-    backgroundColor: '#d32f2f',
   },
   modalContainer: {
-    backgroundColor: 'white',
     margin: 20,
-    borderRadius: 8,
+    borderRadius: 12,
     maxHeight: '80%',
   },
   modalContent: {
@@ -295,7 +317,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   receiptContent: {
-    backgroundColor: '#f9f9f9',
     padding: 16,
     borderRadius: 8,
     marginBottom: 16,
@@ -305,7 +326,6 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     fontSize: 12,
     lineHeight: 16,
-    color: '#333',
   },
   closeButton: {
     marginTop: 8,

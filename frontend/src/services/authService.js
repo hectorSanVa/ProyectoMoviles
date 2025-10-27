@@ -32,5 +32,14 @@ export const authService = {
       throw error.response?.data || { message: 'Error de conexión' };
     }
   },
-};
 
+  // Obtener roles disponibles
+  getRoles: async () => {
+    try {
+      const response = await api.get('/auth/roles');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Error de conexión' };
+    }
+  },
+};

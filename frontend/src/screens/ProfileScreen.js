@@ -1,87 +1,102 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import { Card, Title, Paragraph, Button, List } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, Alert } from 'react-native';
+import { Card, Title, Paragraph, Button, List, Switch, Chip } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+import UserInfo from '../components/UserInfo';
+import { GradientButton } from '../components/EnhancedComponents';
+import DarkModeToggle from '../components/DarkModeToggle';
 
 const ProfileScreen = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, permissions, role } = useAuth();
+  const { theme, toggleTheme, isDarkMode } = useTheme();
 
   const handleLogout = () => {
-    logout();
+    Alert.alert(
+      'Cerrar Sesión',
+      '¿Estás seguro de que quieres cerrar sesión?',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+        {
+          text: 'Cerrar Sesión',
+          style: 'destructive',
+          onPress: logout,
+        },
+      ]
+    );
   };
 
-  return (
-    <View style={styles.container}>
-      <ScrollView style={styles.content}>
-        <Card style={styles.card}>
-          <Card.Content>
-            <Title>Perfil de Usuario</Title>
-            <View style={styles.userInfo}>
-              <MaterialIcons name="person" size={48} color="#2196F3" />
-              <View style={styles.userDetails}>
-                <Paragraph style={styles.userName}>{user?.username || 'Usuario'}</Paragraph>
-                <Paragraph style={styles.userEmail}>{user?.email || 'email@ejemplo.com'}</Paragraph>
-                <Paragraph style={styles.userRole}>Rol: {user?.role || 'user'}</Paragraph>
-              </View>
-            </View>
-          </Card.Content>
-        </Card>
 
-        <Card style={styles.card}>
+  return (
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <ScrollView style={styles.content}>
+        <UserInfo />
+
+        <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
           <Card.Content>
-            <Title>Configuración</Title>
+            <Title style={[styles.title, { color: theme.colors.onSurface }]}>Configuración</Title>
+            
+            <DarkModeToggle style={styles.listItem} />
+            
             <List.Item
               title="Notificaciones"
               description="Configurar alertas del sistema"
               left={props => <List.Icon {...props} icon="bell" />}
               right={props => <List.Icon {...props} icon="chevron-right" />}
+              style={styles.listItem}
+              titleStyle={{ color: theme.colors.onSurface }}
+              descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
             />
-            <List.Item
-              title="Tema"
-              description="Cambiar apariencia de la app"
-              left={props => <List.Icon {...props} icon="palette" />}
-              right={props => <List.Icon {...props} icon="chevron-right" />}
-            />
+            
             <List.Item
               title="Idioma"
               description="Español"
               left={props => <List.Icon {...props} icon="translate" />}
               right={props => <List.Icon {...props} icon="chevron-right" />}
+              style={styles.listItem}
+              titleStyle={{ color: theme.colors.onSurface }}
+              descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
             />
           </Card.Content>
         </Card>
 
-        <Card style={styles.card}>
+        <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
           <Card.Content>
-            <Title>Información del Sistema</Title>
+            <Title style={[styles.title, { color: theme.colors.onSurface }]}>Información del Sistema</Title>
             <View style={styles.systemInfo}>
-              <Paragraph style={styles.infoItem}>
-                <MaterialIcons name="info" size={16} color="#666" /> 
+              <Paragraph style={[styles.infoItem, { color: theme.colors.onSurfaceVariant }]}>
+                <MaterialIcons name="info" size={16} color={theme.colors.onSurfaceVariant} /> 
                 {' '}Versión: 1.0.0
               </Paragraph>
-              <Paragraph style={styles.infoItem}>
-                <MaterialIcons name="build" size={16} color="#666" /> 
+              <Paragraph style={[styles.infoItem, { color: theme.colors.onSurfaceVariant }]}>
+                <MaterialIcons name="build" size={16} color={theme.colors.onSurfaceVariant} /> 
                 {' '}Última actualización: Hoy
               </Paragraph>
-              <Paragraph style={styles.infoItem}>
-                <MaterialIcons name="storage" size={16} color="#666" /> 
+              <Paragraph style={[styles.infoItem, { color: theme.colors.onSurfaceVariant }]}>
+                <MaterialIcons name="storage" size={16} color={theme.colors.onSurfaceVariant} /> 
                 {' '}Base de datos: Conectada
+              </Paragraph>
+              <Paragraph style={[styles.infoItem, { color: theme.colors.onSurfaceVariant }]}>
+                <MaterialIcons name="person" size={16} color={theme.colors.onSurfaceVariant} /> 
+                {' '}Rol: {user?.role || 'Usuario'}
               </Paragraph>
             </View>
           </Card.Content>
         </Card>
 
-        <Card style={styles.card}>
+        <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
           <Card.Content>
-            <Button
-              mode="contained"
+            <GradientButton
+              title="Cerrar Sesión"
               onPress={handleLogout}
+              icon="logout"
+              colors={['#F44336', '#D32F2F']}
               style={styles.logoutButton}
-              buttonColor="#F44336"
-            >
-              Cerrar Sesión
-            </Button>
+            />
           </Card.Content>
         </Card>
       </ScrollView>
@@ -92,7 +107,6 @@ const ProfileScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
     paddingTop: 20,
   },
   content: {
@@ -102,31 +116,15 @@ const styles = StyleSheet.create({
   card: {
     marginBottom: 15,
     elevation: 2,
+    borderRadius: 12,
   },
-  userInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  userDetails: {
-    marginLeft: 15,
-    flex: 1,
-  },
-  userName: {
+  title: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    marginBottom: 10,
   },
-  userEmail: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
-  },
-  userRole: {
-    fontSize: 12,
-    color: '#2196F3',
-    marginTop: 2,
-    fontWeight: 'bold',
+  listItem: {
+    paddingVertical: 8,
   },
   systemInfo: {
     marginTop: 10,
@@ -136,7 +134,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
     fontSize: 14,
-    color: '#666',
   },
   logoutButton: {
     marginTop: 10,

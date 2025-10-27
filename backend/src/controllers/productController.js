@@ -31,14 +31,17 @@ const productController = {
       const offset = (page - 1) * limit;
       paramCount++;
       params.push(limit);
+      const limitParam = paramCount;
       paramCount++;
       params.push(offset);
+      const offsetParam = paramCount;
 
       const result = await query(`
         SELECT 
           p.id, p.name, p.code, p.description, p.purchase_price, 
           p.sale_price, p.stock, p.min_stock, p.image_url, p.sale_type,
           p.unit_of_measure, p.price_per_unit, p.stock_in_units,
+          p.category_id, p.supplier_id,
           c.name as category_name,
           s.name as supplier_name
         FROM products p
@@ -46,7 +49,7 @@ const productController = {
         LEFT JOIN suppliers s ON p.supplier_id = s.id
         ${whereClause}
         ORDER BY p.name
-        LIMIT $${paramCount - 1} OFFSET $${paramCount}
+        LIMIT $${limitParam} OFFSET $${offsetParam}
       `, params);
 
       // Contar total para paginación
@@ -54,7 +57,7 @@ const productController = {
         SELECT COUNT(*) as total
         FROM products p
         ${whereClause}
-      `, params.slice(0, -2));
+      `, params.slice(0, paramCount - 2));
 
       res.json({
         success: true,
@@ -123,6 +126,8 @@ const productController = {
         SELECT 
           p.id, p.name, p.code, p.description, p.purchase_price, 
           p.sale_price, p.stock, p.min_stock, p.image_url,
+          p.sale_type, p.unit_of_measure, p.price_per_unit, p.stock_in_units,
+          p.category_id, p.supplier_id,
           c.name as category_name,
           s.name as supplier_name
         FROM products p
@@ -138,9 +143,51 @@ const productController = {
         });
       }
 
+      const product = result.rows[0];
+
+      // Buscar descuentos activos para este producto
+      const discountsResult = await query(`
+        SELECT * FROM discounts
+        WHERE (discount_type = 'global' OR 
+                (discount_type = 'category' AND target_id = $1) OR
+                (discount_type = 'product' AND target_id = $2))
+        AND is_active = true
+        AND start_date <= CURRENT_DATE
+        AND end_date >= CURRENT_DATE
+        ORDER BY 
+          CASE discount_type
+            WHEN 'product' THEN 1
+            WHEN 'category' THEN 2
+            WHEN 'global' THEN 3
+          END
+        LIMIT 1
+      `, [product.category_id, product.id]);
+
+      if (discountsResult.rows.length > 0) {
+        const discount = discountsResult.rows[0];
+        const discountPercentage = parseFloat(discount.discount_percentage);
+        
+        // Calcular precio con descuento
+        let originalPrice = 0;
+        if (product.sale_type === 'weight') {
+          originalPrice = product.price_per_unit || 0;
+        } else {
+          originalPrice = product.sale_price || 0;
+        }
+
+        const discountAmount = (originalPrice * discountPercentage) / 100;
+        const finalPrice = originalPrice - discountAmount;
+
+        product.discounted_price = finalPrice;
+        product.discount_percentage = discountPercentage;
+        product.has_discount = true;
+        product.original_price = originalPrice;
+        product.discount_type = discount.discount_type;
+      }
+
       res.json({
         success: true,
-        data: result.rows[0]
+        data: product
       });
 
     } catch (error) {
@@ -166,7 +213,7 @@ const productController = {
       const {
         name, code, description, purchase_price, sale_price,
         stock, min_stock, category_id, supplier_id, sale_type,
-        unit_of_measure, price_per_unit, stock_in_units
+        unit_of_measure, price_per_unit, stock_in_units, expiration_date, alert_days_before_expiration
       } = req.body;
 
       console.log('🔍 Valores que se van a insertar:');
@@ -174,10 +221,14 @@ const productController = {
       console.log('  - unit_of_measure:', unit_of_measure || 'kg');
       console.log('  - price_per_unit:', price_per_unit || sale_price);
       console.log('  - stock_in_units:', stock_in_units || stock || 0);
+      console.log('  - expiration_date:', expiration_date || null);
+      console.log('  - alert_days_before_expiration:', alert_days_before_expiration || 7);
 
       // Convertir strings vacíos a null para campos opcionales
       const categoryId = category_id && category_id !== '' ? parseInt(category_id) : null;
       const supplierId = supplier_id && supplier_id !== '' ? parseInt(supplier_id) : null;
+      const expirationDate = expiration_date && expiration_date !== '' ? expiration_date : null;
+      const alertDays = alert_days_before_expiration ? parseInt(alert_days_before_expiration) : 7;
 
       // Validaciones básicas
       if (!name || !code || !purchase_price || !sale_price) {
@@ -212,28 +263,29 @@ const productController = {
       // Determinar valores correctos según el tipo de producto
       const isBulkProduct = sale_type === 'weight';
       const finalSalePrice = isBulkProduct ? (price_per_unit || 0) : (sale_price || 0);
-      const finalPrice = isBulkProduct ? (price_per_unit || 0) : (sale_price || 0);
       const finalStock = isBulkProduct ? (stock_in_units || 0) : (stock || 0);
       const finalStockInUnits = isBulkProduct ? (stock_in_units || 0) : (stock || 0);
 
       console.log('🔍 Valores finales para insertar:');
       console.log('  - isBulkProduct:', isBulkProduct);
       console.log('  - finalSalePrice:', finalSalePrice);
-      console.log('  - finalPrice:', finalPrice);
       console.log('  - finalStock:', finalStock);
       console.log('  - finalStockInUnits:', finalStockInUnits);
+      console.log('  - expirationDate:', expirationDate);
+      console.log('  - alertDays:', alertDays);
 
       const result = await query(`
         INSERT INTO products (
-          name, code, description, purchase_price, sale_price, price,
+          name, code, description, purchase_price, sale_price,
           stock, min_stock, category_id, supplier_id, image_url, sale_type,
-          unit_of_measure, price_per_unit, stock_in_units
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-        RETURNING id, name, code, sale_price, stock, image_url, sale_type, unit_of_measure, price_per_unit, stock_in_units
+          unit_of_measure, price_per_unit, stock_in_units, expiration_date, alert_days_before_expiration
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        RETURNING id, name, code, sale_price, stock, image_url, sale_type, unit_of_measure, price_per_unit, stock_in_units, expiration_date, alert_days_before_expiration
       `, [
-        name, code, description, purchase_price, finalSalePrice, finalPrice,
+        name, code, description, purchase_price, finalSalePrice,
         finalStock, min_stock || 5, categoryId, supplierId, image_url, sale_type || 'unit',
-        unit_of_measure || 'kg', price_per_unit || 0, finalStockInUnits
+        unit_of_measure || 'kg', price_per_unit || 0, finalStockInUnits, 
+        expirationDate, alertDays
       ]);
 
       res.status(201).json({
@@ -243,10 +295,13 @@ const productController = {
       });
 
     } catch (error) {
-      console.error('Error creando producto:', error);
+      console.error('❌ Error creando producto:', error);
+      console.error('❌ Stack:', error.stack);
       res.status(500).json({
         success: false,
-        message: 'Error interno del servidor'
+        message: 'Error interno del servidor',
+        error: error.message,
+        details: error.stack
       });
     }
   },
@@ -263,7 +318,7 @@ const productController = {
       const {
         name, code, description, purchase_price, sale_price,
         stock, min_stock, category_id, supplier_id, sale_type,
-        unit_of_measure, price_per_unit, stock_in_units
+        unit_of_measure, price_per_unit, stock_in_units, expiration_date, alert_days_before_expiration
       } = req.body;
 
       // Validaciones básicas
@@ -314,13 +369,16 @@ const productController = {
           unit_of_measure = $13,
           price_per_unit = $14,
           stock_in_units = $15,
+          expiration_date = $16,
+          alert_days_before_expiration = $17,
           updated_at = CURRENT_TIMESTAMP
         WHERE id = $1
-        RETURNING id, name, code, sale_price, stock, image_url, sale_type, unit_of_measure, price_per_unit, stock_in_units
+        RETURNING id, name, code, sale_price, stock, image_url, sale_type, unit_of_measure, price_per_unit, stock_in_units, expiration_date, alert_days_before_expiration
       `, [
         id, name, code, description, purchase_price, sale_price,
         stock, min_stock, categoryId, supplierId, image_url, sale_type || 'unit',
-        unit_of_measure || 'kg', price_per_unit || sale_price, stock_in_units || stock || 0
+        unit_of_measure || 'kg', price_per_unit || sale_price, stock_in_units || stock || 0,
+        expiration_date || null, alert_days_before_expiration || 7
       ]);
 
       res.json({
@@ -366,6 +424,106 @@ const productController = {
       res.status(500).json({
         success: false,
         message: 'Error interno del servidor'
+      });
+    }
+  },
+
+  // Obtener productos próximos a vencer
+  getNearExpiration: async (req, res) => {
+    try {
+      const { days = 7 } = req.query;
+      const daysInt = parseInt(days) || 7;
+
+      console.log('🔍 Consultando productos próximos a vencer, días:', daysInt);
+
+      // Consulta simplificada sin JOINs para evitar errores
+      const result = await query(`
+        SELECT 
+          p.id,
+          p.name,
+          p.code,
+          p.expiration_date,
+          p.stock,
+          p.min_stock,
+          p.sale_price,
+          p.image_url,
+          p.sale_type,
+          p.unit_of_measure,
+          p.price_per_unit,
+          p.stock_in_units,
+          (p.expiration_date - CURRENT_DATE) as days_until_expiration
+        FROM products p
+        WHERE p.expiration_date IS NOT NULL
+        AND p.expiration_date <= (CURRENT_DATE + $1::integer)
+        AND p.expiration_date > CURRENT_DATE
+        AND p.is_active = true
+        ORDER BY p.expiration_date ASC
+      `, [daysInt]);
+
+      console.log('✅ Productos próximos a vencer encontrados:', result.rows.length);
+
+      res.json({
+        success: true,
+        data: result.rows || [],
+        count: result.rows?.length || 0
+      });
+
+    } catch (error) {
+      console.error('❌ Error obteniendo productos próximos a vencer:', error);
+      console.error('❌ Stack:', error.stack);
+      res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor',
+        error: error.message,
+        details: error.stack
+      });
+    }
+  },
+
+  // Obtener productos vencidos
+  getExpired: async (req, res) => {
+    try {
+      console.log('🔍 Consultando productos vencidos');
+
+      // Consulta simplificada sin JOINs para evitar errores
+      const result = await query(`
+        SELECT 
+          p.id,
+          p.name,
+          p.code,
+          p.expiration_date,
+          p.stock,
+          p.min_stock,
+          p.sale_price,
+          p.image_url,
+          p.sale_type,
+          p.unit_of_measure,
+          p.price_per_unit,
+          p.stock_in_units,
+          (CURRENT_DATE - p.expiration_date) as days_expired
+        FROM products p
+        WHERE p.expiration_date IS NOT NULL
+        AND p.expiration_date < CURRENT_DATE
+        AND p.is_active = true
+        ORDER BY p.expiration_date ASC
+      `);
+
+      console.log('✅ Productos vencidos encontrados:', result.rows.length);
+
+      res.json({
+        success: true,
+        data: result.rows,
+        count: result.rows.length
+      });
+
+    } catch (error) {
+      console.error('❌ Error obteniendo productos vencidos:', error);
+      console.error('❌ Stack:', error.stack);
+      res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor',
+        error: error.message,
+        details: error.stack
       });
     }
   }

@@ -15,9 +15,9 @@ const authController = {
         });
       }
 
-      // Buscar usuario
+      // Buscar usuario con información del rol
       const result = await query(
-        'SELECT id, username, email, password_hash, role FROM users WHERE username = $1 AND is_active = true',
+        'SELECT u.id, u.username, u.email, u.password_hash, u.role_id, r.name as role_name, r.permissions FROM users u LEFT JOIN roles r ON u.role_id = r.id WHERE u.username = $1 AND u.is_active = true',
         [username]
       );
 
@@ -44,7 +44,9 @@ const authController = {
         { 
           id: user.id, 
           username: user.username, 
-          role: user.role 
+          role: user.role_name,
+          role_id: user.role_id,
+          permissions: user.permissions
         },
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }

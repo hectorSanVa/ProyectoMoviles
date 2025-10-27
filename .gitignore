@@ -10,6 +10,8 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+backend/.env
+frontend/.env
 
 # Build outputs
 dist/
@@ -64,3 +66,12 @@ temp/
 
 # Flipper
 ios/Pods/
+
+# Uploads and temp files
+uploads/
+temp/
+*.sql
+backup-*.sql
+
+# Package locks (keep main ones, ignore nested)
+**/node_modules/**/package-lock.json

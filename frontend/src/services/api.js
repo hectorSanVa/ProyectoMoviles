@@ -2,8 +2,8 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Configuración base de la API
-// URL del backend desplegado en Railway
-const API_BASE_URL = 'https://proyectomoviles-production.up.railway.app/api';
+// URL del backend local conectado a PostgreSQL local
+const API_BASE_URL = 'http://192.168.1.83:5000/api';
 
 // Crear instancia de axios
 const api = axios.create({

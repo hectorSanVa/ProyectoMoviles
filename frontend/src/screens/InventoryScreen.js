@@ -1,17 +1,51 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, FlatList, RefreshControl, Alert } from 'react-native';
-import { Card, Title, Paragraph, Button, Chip, Divider, Searchbar } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, FlatList, Alert, Modal, Image, TouchableOpacity } from 'react-native';
+import { Card, Title, Paragraph, Button, FAB, TextInput, Chip, Divider, IconButton } from 'react-native-paper';
+import * as ImagePicker from 'expo-image-picker';
 import { MaterialIcons } from '@expo/vector-icons';
 import { productService } from '../services/productService';
-import { salesService } from '../services/salesService';
+import { categoryService } from '../services/categoryService';
+import { supplierService } from '../services/supplierService';
+import { useTheme } from '../context/ThemeContext';
+import SimpleQRGenerator from '../components/SimpleQRGenerator';
+import DatePickerComponent from '../components/DatePickerComponent';
 
 const InventoryScreen = () => {
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { theme } = useTheme();
   const [products, setProducts] = useState([]);
-  const [sales, setSales] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('inventory'); // 'inventory' o 'sales'
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [selectedProductForQR, setSelectedProductForQR] = useState(null);
+
+  // Formulario
+  const [formData, setFormData] = useState({
+    name: '',
+    code: '',
+    description: '',
+    purchase_price: '',
+    sale_price: '',
+    stock: '',
+    min_stock: '',
+    category_id: '',
+    supplier_id: '',
+    sale_type: 'unit',
+    unit_of_measure: 'kg',
+    price_per_unit: '',
+    stock_in_units: '',
+    expiration_date: '',
+    alert_days_before_expiration: '7',
+    discount_percentage: '0',
+    offer_start_date: '',
+    offer_end_date: '',
+    image: null
+  });
+
+  const [selectedImage, setSelectedImage] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -20,162 +54,781 @@ const InventoryScreen = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [productsRes, salesRes] = await Promise.all([
+      console.log('🔄 Cargando datos...');
+      
+      const [productsRes, categoriesRes, suppliersRes] = await Promise.all([
         productService.getAll(),
-        salesService.getAll()
+        categoryService.getAll(),
+        supplierService.getAll()
       ]);
-
-      if (productsRes.success) setProducts(productsRes.data);
-      if (salesRes.success) setSales(salesRes.data);
+      
+      console.log('📦 Productos:', productsRes);
+      console.log('📂 Categorías:', categoriesRes);
+      console.log('🏢 Proveedores:', suppliersRes);
+      
+      if (productsRes.success) {
+        // Forzar actualización del estado
+        const newProducts = [...productsRes.data];
+        setProducts(newProducts);
+        console.log('✅ Productos cargados:', newProducts.length);
+        console.log('📦 Datos del producto:', newProducts[0]);
+      } else {
+        console.log('❌ Error cargando productos:', productsRes.message);
+      }
+      
+      if (categoriesRes.success) {
+        setCategories(categoriesRes.data);
+        console.log('✅ Categorías cargadas:', categoriesRes.data.length);
+      } else {
+        console.log('❌ Error cargando categorías:', categoriesRes.message);
+      }
+      
+      if (suppliersRes.success) {
+        setSuppliers(suppliersRes.data);
+        console.log('✅ Proveedores cargados:', suppliersRes.data.length);
+      } else {
+        console.log('❌ Error cargando proveedores:', suppliersRes.message);
+      }
     } catch (error) {
-      Alert.alert('Error', 'No se pudieron cargar los datos');
+      console.log('❌ Error cargando datos:', error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
+  const handleSave = async () => {
+    try {
+      // Validación básica
+      if (!formData.name || !formData.code) {
+        Alert.alert('Error', 'Nombre y código son requeridos');
+        return;
+      }
+
+      // Validación específica según el tipo de producto
+      if (formData.sale_type === 'weight') {
+        // Para productos a granel, validar price_per_unit
+        if (!formData.price_per_unit || parseFloat(formData.price_per_unit) <= 0) {
+          Alert.alert('Error', 'Precio por unidad de peso es requerido para productos a granel');
+          return;
+        }
+      } else {
+        // Para productos por unidad, validar sale_price
+        if (!formData.sale_price || parseFloat(formData.sale_price) <= 0) {
+          Alert.alert('Error', 'Precio de venta es requerido');
+          return;
+        }
+      }
+
+      // Debug: Mostrar los valores del formData
+      console.log('🔍 FormData completo antes de enviar:');
+      console.log(JSON.stringify(formData, null, 2));
+      console.log('🔍 Valores específicos:');
+      console.log('  - sale_type:', formData.sale_type);
+      console.log('  - unit_of_measure:', formData.unit_of_measure);
+      console.log('  - price_per_unit:', formData.price_per_unit);
+      console.log('  - stock_in_units:', formData.stock_in_units);
+      console.log('  - sale_price:', formData.sale_price);
+      console.log('  - stock:', formData.stock);
+
+      const productData = {
+        ...formData,
+        purchase_price: parseFloat(formData.purchase_price) || 0,
+        sale_price: parseFloat(formData.sale_price),
+        stock: parseInt(formData.stock) || 0,
+        min_stock: parseInt(formData.min_stock) || 0,
+        category_id: formData.category_id || null,
+        supplier_id: formData.supplier_id || null,
+        sale_type: formData.sale_type || 'unit',
+        unit_of_measure: formData.unit_of_measure || 'kg',
+        price_per_unit: parseFloat(formData.price_per_unit) || parseFloat(formData.sale_price),
+        stock_in_units: parseFloat(formData.stock_in_units) || parseFloat(formData.stock) || 0
+      };
+
+      // Debug: Mostrar los valores del productData
+      console.log('📤 ProductData completo que se enviará:');
+      console.log(JSON.stringify(productData, null, 2));
+      console.log('📤 Valores específicos:');
+      console.log('  - sale_type:', productData.sale_type);
+      console.log('  - unit_of_measure:', productData.unit_of_measure);
+      console.log('  - price_per_unit:', productData.price_per_unit);
+      console.log('  - stock_in_units:', productData.stock_in_units);
+
+      let response;
+      if (editingProduct) {
+        response = await productService.update(editingProduct.id, productData);
+      } else {
+        response = await productService.create(productData);
+      }
+
+      if (response.success) {
+        console.log('✅ Producto guardado exitosamente');
+        
+        // Si es un producto nuevo, mostrar el QR automáticamente
+        if (!editingProduct && response.data) {
+          Alert.alert(
+            'Producto Creado',
+            '¿Deseas ver el código QR de este producto?',
+            [
+              {
+                text: 'Ver QR',
+                onPress: () => {
+                  setSelectedProductForQR(response.data);
+                  setShowQRModal(true);
+                }
+              },
+              {
+                text: 'Después',
+                onPress: () => {}
+              }
+            ]
+          );
+        } else {
+          Alert.alert('Éxito', 'Producto guardado exitosamente');
+        }
+        
+        setShowForm(false);
+        setEditingProduct(null);
+        resetForm();
+        
+        // Recargar datos después de un pequeño delay
+        setTimeout(() => {
+          console.log('🔄 Recargando datos después de guardar...');
+          loadData();
+        }, 1000);
+      } else {
+        console.log('❌ Error guardando producto:', response.message);
+        Alert.alert('Error', response.message);
+      }
+    } catch (error) {
+      console.log('Error guardando producto:', error.message);
+      Alert.alert('Error', 'No se pudo guardar el producto. Intenta nuevamente.');
+    }
   };
 
-  const formatCurrency = (amount) => {
-    return `$${parseFloat(amount).toFixed(2)}`;
-  };
-
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('es-MX', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+  const handleEdit = (product) => {
+    setEditingProduct(product);
+    setFormData({
+      name: product.name || '',
+      code: product.code || '',
+      description: product.description || '',
+      purchase_price: product.purchase_price?.toString() || '',
+      sale_price: product.sale_price?.toString() || '',
+      stock: product.stock?.toString() || '',
+      min_stock: product.min_stock?.toString() || '',
+      category_id: product.category_id?.toString() || '',
+      supplier_id: product.supplier_id?.toString() || '',
+      sale_type: product.sale_type || 'unit',
+      unit_of_measure: product.unit_of_measure || 'kg',
+      price_per_unit: product.price_per_unit?.toString() || '',
+      stock_in_units: product.stock_in_units?.toString() || '',
+      expiration_date: product.expiration_date || '',
+      alert_days_before_expiration: product.alert_days_before_expiration?.toString() || '7',
+      discount_percentage: product.discount_percentage?.toString() || '0',
+      offer_start_date: product.offer_start_date || '',
+      offer_end_date: product.offer_end_date || '',
+      image: null
     });
+    setSelectedImage(product.image_url ? { uri: product.image_url } : null);
+    setShowForm(true);
   };
 
-  const renderProduct = ({ item }) => (
-    <Card style={styles.itemCard}>
-      <Card.Content>
-        <View style={styles.itemHeader}>
-          <View style={styles.itemInfo}>
-            <Title style={styles.itemName}>{item.name}</Title>
-            <Paragraph style={styles.itemCode}>Código: {item.code}</Paragraph>
-          </View>
-          <Chip 
-            style={[
-              styles.stockChip, 
-              { backgroundColor: item.stock < item.min_stock ? '#F44336' : '#4CAF50' }
-            ]}
-            textStyle={{ color: 'white' }}
-          >
-            Stock: {item.stock}
-          </Chip>
-        </View>
-        <View style={styles.itemDetails}>
-          <Paragraph style={styles.itemPrice}>Precio: {formatCurrency(item.sale_price)}</Paragraph>
-          <Paragraph style={styles.itemMin}>Mín: {item.min_stock}</Paragraph>
-        </View>
-      </Card.Content>
-    </Card>
-  );
+  const handleDelete = async (product) => {
+    Alert.alert(
+      'Confirmar eliminación',
+      `¿Estás seguro de que quieres eliminar "${product.name}"?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const response = await productService.delete(product.id);
+              if (response.success) {
+                Alert.alert('Éxito', 'Producto eliminado exitosamente');
+                loadData();
+              } else {
+                Alert.alert('Error', response.message);
+              }
+            } catch (error) {
+              Alert.alert('Error', 'No se pudo eliminar el producto');
+            }
+          }
+        }
+      ]
+    );
+  };
 
-  const renderSale = ({ item }) => (
-    <Card style={styles.itemCard}>
-      <Card.Content>
-        <View style={styles.itemHeader}>
-          <View style={styles.itemInfo}>
-            <Title style={styles.itemName}>Venta #{item.sale_number}</Title>
-            <Paragraph style={styles.itemCode}>Cliente: {item.customer_name}</Paragraph>
-          </View>
-          <Chip style={styles.saleChip}>
-            {formatCurrency(item.total)}
-          </Chip>
-        </View>
-        <View style={styles.itemDetails}>
-          <Paragraph style={styles.itemDate}>{formatDate(item.created_at)}</Paragraph>
-          <Paragraph style={styles.itemPayment}>Pago: {item.payment_method}</Paragraph>
-        </View>
-        {item.items && item.items.length > 0 && (
-          <View style={styles.saleItems}>
-            <Divider style={styles.divider} />
-            <Paragraph style={styles.itemsTitle}>Productos vendidos:</Paragraph>
-            {item.items.map((saleItem, index) => (
-              <View key={index} style={styles.saleItem}>
-                <Paragraph style={styles.saleItemName}>{saleItem.product_name}</Paragraph>
-                <Paragraph style={styles.saleItemQty}>Cantidad: {saleItem.quantity}</Paragraph>
-                <Paragraph style={styles.saleItemPrice}>{formatCurrency(saleItem.unit_price)}</Paragraph>
-              </View>
-            ))}
-          </View>
-        )}
-      </Card.Content>
-    </Card>
-  );
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      code: '',
+      description: '',
+      purchase_price: '',
+      sale_price: '',
+      stock: '',
+      min_stock: '',
+      category_id: '',
+      supplier_id: '',
+      sale_type: 'unit',
+      unit_of_measure: 'kg',
+      price_per_unit: '',
+      stock_in_units: '',
+      expiration_date: '',
+      alert_days_before_expiration: '7',
+      discount_percentage: '0',
+      offer_start_date: '',
+      offer_end_date: '',
+      image: null
+    });
+    setSelectedImage(null);
+  };
+
+  const handleImagePicker = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled) {
+        setSelectedImage(result.assets[0]);
+        setFormData({ ...formData, image: result.assets[0] });
+      }
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo seleccionar la imagen');
+    }
+  };
+
+  const getCategoryName = (categoryId) => {
+    if (!categoryId) return 'Sin categoría';
+    const category = categories.find(cat => cat.id === parseInt(categoryId));
+    console.log('🔍 Buscando categoría:', categoryId, 'Encontrada:', category);
+    return category ? category.name : 'Sin categoría';
+  };
+
+  const getSupplierName = (supplierId) => {
+    if (!supplierId) return 'Sin proveedor';
+    const supplier = suppliers.find(sup => sup.id === parseInt(supplierId));
+    console.log('🔍 Buscando proveedor:', supplierId, 'Encontrado:', supplier);
+    return supplier ? supplier.name : 'Sin proveedor';
+  };
 
   const filteredProducts = products.filter(product =>
     product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     product.code.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredSales = sales.filter(sale =>
-    sale.customer_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    sale.sale_number.toLowerCase().includes(searchQuery.toLowerCase())
+  const renderProduct = ({ item }) => (
+    <Card style={[styles.productCard, { backgroundColor: theme.colors.surface }]}>
+      <Card.Content>
+        <View style={styles.productHeader}>
+          <View style={styles.productInfo}>
+            <Title style={[styles.productName, { color: theme.colors.onSurface }]}>{item.name}</Title>
+            <Paragraph style={[styles.productCode, { color: theme.colors.onSurfaceVariant }]}>Código: {item.code}</Paragraph>
+            <Paragraph style={[styles.productPrice, { color: theme.colors.primary }]}>Precio: ${item.sale_price}</Paragraph>
+            <Paragraph style={[styles.productStock, { color: theme.colors.onSurfaceVariant }]}>Stock: {item.stock}</Paragraph>
+            <Paragraph style={[styles.productCategory, { color: theme.colors.onSurfaceVariant }]}>
+              Categoría: {item.category_name || 'Sin categoría'}
+            </Paragraph>
+            <Paragraph style={[styles.productSupplier, { color: theme.colors.onSurfaceVariant }]}>
+              Proveedor: {item.supplier_name || 'Sin proveedor'}
+            </Paragraph>
+            <Paragraph style={[styles.productSaleType, { color: theme.colors.onSurfaceVariant }]}>
+              Tipo: {item.sale_type === 'weight' ? 'A granel (peso)' : 'Por unidad'}
+            </Paragraph>
+            {item.sale_type === 'weight' && (
+              <Paragraph style={[styles.productBulkInfo, { color: theme.colors.onSurfaceVariant }]}>
+                Precio: ${item.price_per_unit || 0}/${item.unit_of_measure || 'kg'} | Stock: {item.stock_in_units || 0}{item.unit_of_measure || 'kg'}
+              </Paragraph>
+            )}
+          </View>
+          {item.image_url && (
+            <Image source={{ uri: item.image_url }} style={styles.productImage} />
+          )}
+        </View>
+        <View style={styles.productActions}>
+          <Button
+            mode="outlined"
+            onPress={() => handleEdit(item)}
+            style={styles.actionButton}
+            theme={{ colors: { outline: theme.colors.outline } }}
+            textColor={theme.colors.primary}
+            icon="pencil"
+          >
+            Editar
+          </Button>
+          <Button
+            mode="contained"
+            onPress={() => {
+              setSelectedProductForQR(item);
+              setShowQRModal(true);
+            }}
+            style={styles.actionButton}
+            buttonColor="#7C3AED"
+            textColor="#fff"
+            icon="qrcode"
+          >
+            QR
+          </Button>
+          <Button
+            mode="outlined"
+            onPress={() => handleDelete(item)}
+            style={[styles.actionButton, styles.deleteButton]}
+            textColor={theme.colors.error}
+            theme={{ colors: { outline: theme.colors.error } }}
+            icon="delete"
+          >
+            Eliminar
+          </Button>
+        </View>
+      </Card.Content>
+    </Card>
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.tabButtons}>
-          <Button
-            mode={activeTab === 'inventory' ? 'contained' : 'outlined'}
-            onPress={() => setActiveTab('inventory')}
-            style={styles.tabButton}
-            icon="inventory"
-          >
-            Inventario
-          </Button>
-          <Button
-            mode={activeTab === 'sales' ? 'contained' : 'outlined'}
-            onPress={() => setActiveTab('sales')}
-            style={styles.tabButton}
-            icon="receipt"
-          >
-            Ventas
-          </Button>
-        </View>
-        <Searchbar
-          placeholder={`Buscar ${activeTab === 'inventory' ? 'productos' : 'ventas'}...`}
-          onChangeText={setSearchQuery}
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
+        <Title style={[styles.headerTitle, { color: theme.colors.onSurface }]}>Inventario</Title>
+        <Paragraph style={[styles.headerSubtitle, { color: theme.colors.onSurfaceVariant }]}>
+          Gestiona tus productos e inventario
+        </Paragraph>
+      </View>
+
+      <View style={[styles.searchContainer, { backgroundColor: theme.colors.surface }]}>
+        <TextInput
+          placeholder="Buscar productos..."
           value={searchQuery}
-          style={styles.searchBar}
+          onChangeText={setSearchQuery}
+          style={[styles.searchInput, { backgroundColor: theme.colors.surfaceContainer }]}
+          placeholderTextColor={theme.colors.onSurfaceVariant}
+          theme={{ colors: { text: theme.colors.onSurface, primary: theme.colors.primary, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
+          left={<TextInput.Icon icon="magnify" color={theme.colors.onSurfaceVariant} />}
         />
       </View>
 
-      {activeTab === 'inventory' ? (
-        <FlatList
-          data={filteredProducts}
-          renderItem={renderProduct}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={styles.listContainer}
-          style={styles.content}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
+      <FlatList
+        data={filteredProducts}
+        renderItem={renderProduct}
+        keyExtractor={(item) => item.id.toString()}
+        contentContainerStyle={styles.productsList}
+        refreshing={loading}
+        onRefresh={loadData}
+      />
+
+      <FAB
+        icon="plus"
+        style={styles.fab}
+        onPress={() => {
+          resetForm();
+          setShowForm(true);
+        }}
+      />
+
+      <Modal
+        visible={showForm}
+        onDismiss={() => {
+          setShowForm(false);
+          setEditingProduct(null);
+          resetForm();
+        }}
+        contentContainerStyle={[styles.modalContainer, { backgroundColor: theme.colors.surface }]}
+      >
+        <ScrollView style={[styles.modalContent, { backgroundColor: theme.colors.surface }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: theme.colors.outline }]}>
+            <Title style={[styles.modalTitle, { color: theme.colors.onSurface }]}>
+              {editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
+            </Title>
+            <IconButton
+              icon="close"
+              iconColor={theme.colors.onSurfaceVariant}
+              onPress={() => {
+                setShowForm(false);
+                setEditingProduct(null);
+                resetForm();
+              }}
+            />
+          </View>
+
+          <View style={styles.form}>
+            <View style={styles.input}>
+              <TextInput
+                label="Nombre del producto *"
+                value={formData.name}
+                onChangeText={(text) => setFormData({ ...formData, name: text })}
+                style={[styles.textInput, { backgroundColor: theme.colors.surfaceContainer }]}
+                theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
+              />
+            </View>
+
+            <View style={styles.input}>
+              <TextInput
+                label="Código del producto *"
+                value={formData.code}
+                onChangeText={(text) => setFormData({ ...formData, code: text })}
+                style={[styles.textInput, { backgroundColor: theme.colors.surfaceContainer }]}
+                theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
+              />
+            </View>
+
+            <View style={styles.input}>
+              <TextInput
+                label="Descripción"
+                value={formData.description}
+                onChangeText={(text) => setFormData({ ...formData, description: text })}
+                style={[styles.textInput, { backgroundColor: theme.colors.surfaceContainer }]}
+                theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
+                multiline
+              />
+            </View>
+
+            {/* Sección de Tipo de Venta - MOVIDA AL PRINCIPIO */}
+            <View style={[styles.section, { backgroundColor: theme.colors.surfaceContainer, borderColor: theme.colors.outline }]}>
+              <Title style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>⚖️ Tipo de Venta</Title>
+              
+              <View style={styles.input}>
+                <Paragraph style={[styles.label, { color: theme.colors.onSurface }]}>¿Cómo se vende este producto?</Paragraph>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipContainer}>
+                  <Chip
+                    selected={formData.sale_type === 'unit'}
+                    onPress={() => setFormData({...formData, sale_type: 'unit'})}
+                    style={[styles.chip, { backgroundColor: formData.sale_type === 'unit' ? theme.colors.primaryContainer : theme.colors.surfaceContainer, borderColor: theme.colors.outline }]}
+                    textStyle={{ color: formData.sale_type === 'unit' ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant }}
+                  >
+                    📦 Por unidad
+                  </Chip>
+                  <Chip
+                    selected={formData.sale_type === 'weight'}
+                    onPress={() => setFormData({...formData, sale_type: 'weight'})}
+                    style={[styles.chip, { backgroundColor: formData.sale_type === 'weight' ? theme.colors.primaryContainer : theme.colors.surfaceContainer, borderColor: theme.colors.outline }]}
+                    textStyle={{ color: formData.sale_type === 'weight' ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant }}
+                  >
+                    ⚖️ A granel (peso)
+                  </Chip>
+                </ScrollView>
+              </View>
+
+              {formData.sale_type === 'weight' && (
+                <View style={styles.input}>
+                  <Paragraph style={[styles.label, { color: theme.colors.onSurface }]}>Unidad de medida</Paragraph>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipContainer}>
+                    <Chip
+                      selected={formData.unit_of_measure === 'kg'}
+                      onPress={() => setFormData({...formData, unit_of_measure: 'kg'})}
+                      style={[styles.chip, { backgroundColor: formData.unit_of_measure === 'kg' ? theme.colors.primaryContainer : theme.colors.surfaceContainer, borderColor: theme.colors.outline }]}
+                      textStyle={{ color: formData.unit_of_measure === 'kg' ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant }}
+                    >
+                      Kilogramos (kg)
+                    </Chip>
+                    <Chip
+                      selected={formData.unit_of_measure === 'g'}
+                      onPress={() => setFormData({...formData, unit_of_measure: 'g'})}
+                      style={[styles.chip, { backgroundColor: formData.unit_of_measure === 'g' ? theme.colors.primaryContainer : theme.colors.surfaceContainer, borderColor: theme.colors.outline }]}
+                      textStyle={{ color: formData.unit_of_measure === 'g' ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant }}
+                    >
+                      Gramos (g)
+                    </Chip>
+                    <Chip
+                      selected={formData.unit_of_measure === 'lb'}
+                      onPress={() => setFormData({...formData, unit_of_measure: 'lb'})}
+                      style={[styles.chip, { backgroundColor: formData.unit_of_measure === 'lb' ? theme.colors.primaryContainer : theme.colors.surfaceContainer, borderColor: theme.colors.outline }]}
+                      textStyle={{ color: formData.unit_of_measure === 'lb' ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant }}
+                    >
+                      Libras (lb)
+                    </Chip>
+                  </ScrollView>
+                </View>
+              )}
+            </View>
+
+            {/* Sección de Precios y Stock */}
+            <View style={[styles.section, { backgroundColor: theme.colors.surfaceContainer, borderColor: theme.colors.outline }]}>
+              <Title style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>💰 Precios y Stock</Title>
+              
+              {formData.sale_type === 'unit' ? (
+                // Producto por unidad
+                <>
+                  <View style={styles.row}>
+                    <View style={[styles.input, styles.halfInput]}>
+                      <TextInput
+                        label="Precio de compra"
+                        value={formData.purchase_price}
+                        onChangeText={(text) => setFormData({ ...formData, purchase_price: text })}
+                        keyboardType="numeric"
+                        style={[styles.textInput, { backgroundColor: theme.colors.surfaceContainer }]}
+                theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
+                      />
+                    </View>
+                    <View style={[styles.input, styles.halfInput]}>
+                      <TextInput
+                        label="Precio de venta *"
+                        value={formData.sale_price}
+                        onChangeText={(text) => setFormData({ ...formData, sale_price: text })}
+                        keyboardType="numeric"
+                        style={[styles.textInput, { backgroundColor: theme.colors.surfaceContainer }]}
+                theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
+                      />
+                    </View>
+                  </View>
+
+                  <View style={styles.row}>
+                    <View style={[styles.input, styles.halfInput]}>
+                      <TextInput
+                        label="Stock (unidades)"
+                        value={formData.stock}
+                        onChangeText={(text) => setFormData({ ...formData, stock: text })}
+                        keyboardType="numeric"
+                        style={[styles.textInput, { backgroundColor: theme.colors.surfaceContainer }]}
+                theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
+                      />
+                    </View>
+                    <View style={[styles.input, styles.halfInput]}>
+                      <TextInput
+                        label="Stock mínimo"
+                        value={formData.min_stock}
+                        onChangeText={(text) => setFormData({ ...formData, min_stock: text })}
+                        keyboardType="numeric"
+                        style={[styles.textInput, { backgroundColor: theme.colors.surfaceContainer }]}
+                theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
+                      />
+                    </View>
+                  </View>
+                </>
+              ) : (
+                // Producto a granel
+                <>
+                  <View style={styles.row}>
+                    <View style={[styles.input, styles.halfInput]}>
+                      <TextInput
+                        label="Precio de compra"
+                        value={formData.purchase_price}
+                        onChangeText={(text) => setFormData({ ...formData, purchase_price: text })}
+                        keyboardType="numeric"
+                        style={[styles.textInput, { backgroundColor: theme.colors.surfaceContainer }]}
+                theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
+                      />
+                    </View>
+                    <View style={[styles.input, styles.halfInput]}>
+                      <TextInput
+                        label={`Precio por ${formData.unit_of_measure} *`}
+                        value={formData.price_per_unit}
+                        onChangeText={(text) => setFormData({ ...formData, price_per_unit: text })}
+                        keyboardType="numeric"
+                        style={[styles.textInput, { backgroundColor: theme.colors.surfaceContainer }]}
+                theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
+                      />
+                    </View>
+                  </View>
+
+                  <View style={styles.row}>
+                    <View style={[styles.input, styles.halfInput]}>
+                      <TextInput
+                        label={`Stock en ${formData.unit_of_measure}`}
+                        value={formData.stock_in_units}
+                        onChangeText={(text) => setFormData({ ...formData, stock_in_units: text })}
+                        keyboardType="numeric"
+                        style={[styles.textInput, { backgroundColor: theme.colors.surfaceContainer }]}
+                theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
+                      />
+                    </View>
+                    <View style={[styles.input, styles.halfInput]}>
+                      <TextInput
+                        label="Stock mínimo"
+                        value={formData.min_stock}
+                        onChangeText={(text) => setFormData({ ...formData, min_stock: text })}
+                        keyboardType="numeric"
+                        style={[styles.textInput, { backgroundColor: theme.colors.surfaceContainer }]}
+                theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
+                      />
+                    </View>
+                  </View>
+                </>
+              )}
+            </View>
+
+            {/* Sección de Clasificación */}
+            <View style={[styles.section, { backgroundColor: theme.colors.surfaceContainer, borderColor: theme.colors.outline }]}>
+              <Title style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>🏷️ Clasificación</Title>
+              
+              <View style={styles.input}>
+                <Paragraph style={[styles.label, { color: theme.colors.onSurface }]}>Categoría (opcional)</Paragraph>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipContainer}>
+                  <Chip
+                    selected={!formData.category_id}
+                    onPress={() => setFormData({...formData, category_id: ''})}
+                    style={[styles.chip, { backgroundColor: !formData.category_id ? theme.colors.primaryContainer : theme.colors.surfaceContainer, borderColor: theme.colors.outline }]}
+                    textStyle={{ color: !formData.category_id ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant }}
+                  >
+                    Sin categoría
+                  </Chip>
+                  {categories.map(category => (
+                    <Chip
+                      key={category.id}
+                      selected={formData.category_id === category.id.toString()}
+                      onPress={() => setFormData({...formData, category_id: category.id.toString()})}
+                      style={[styles.chip, { backgroundColor: formData.category_id === category.id.toString() ? theme.colors.primaryContainer : theme.colors.surfaceContainer, borderColor: theme.colors.outline }]}
+                      textStyle={{ color: formData.category_id === category.id.toString() ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant }}
+                    >
+                      {category.name}
+                    </Chip>
+                  ))}
+                </ScrollView>
+              </View>
+
+              <View style={styles.input}>
+                <Paragraph style={[styles.label, { color: theme.colors.onSurface }]}>Proveedor (opcional)</Paragraph>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipContainer}>
+                  <Chip
+                    selected={!formData.supplier_id}
+                    onPress={() => setFormData({...formData, supplier_id: ''})}
+                    style={[styles.chip, { backgroundColor: !formData.supplier_id ? theme.colors.primaryContainer : theme.colors.surfaceContainer, borderColor: theme.colors.outline }]}
+                    textStyle={{ color: !formData.supplier_id ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant }}
+                  >
+                    Sin proveedor
+                  </Chip>
+                  {suppliers.map(supplier => (
+                    <Chip
+                      key={supplier.id}
+                      selected={formData.supplier_id === supplier.id.toString()}
+                      onPress={() => setFormData({...formData, supplier_id: supplier.id.toString()})}
+                      style={[styles.chip, { backgroundColor: formData.supplier_id === supplier.id.toString() ? theme.colors.primaryContainer : theme.colors.surfaceContainer, borderColor: theme.colors.outline }]}
+                      textStyle={{ color: formData.supplier_id === supplier.id.toString() ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant }}
+                    >
+                      {supplier.name}
+                    </Chip>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+
+            {/* Sección de Fecha de Vencimiento */}
+            <View style={[styles.section, { backgroundColor: theme.colors.surfaceContainer, borderColor: theme.colors.outline }]}>
+              <Title style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>📅 Fecha de Vencimiento</Title>
+              
+              <View style={styles.input}>
+                <DatePickerComponent
+                  label="Fecha de vencimiento (opcional)"
+                  value={formData.expiration_date}
+                  onChange={(date) => setFormData({ ...formData, expiration_date: date })}
+                  theme={theme}
+                />
+                <Paragraph style={[styles.helpText, { color: theme.colors.onSurfaceVariant }]}>
+                  Presiona el icono de calendario para seleccionar la fecha
+                </Paragraph>
+              </View>
+
+              <View style={styles.input}>
+                <TextInput
+                  label="Días de alerta antes del vencimiento"
+                  value={formData.alert_days_before_expiration}
+                  onChangeText={(text) => setFormData({ ...formData, alert_days_before_expiration: text })}
+                  keyboardType="numeric"
+                  style={[styles.textInput, { backgroundColor: theme.colors.surfaceContainer }]}
+                theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
+                />
+                <Paragraph style={[styles.helpText, { color: theme.colors.onSurfaceVariant }]}>
+                  Número de días antes del vencimiento para mostrar alerta (default: 7 días)
+                </Paragraph>
+              </View>
+            </View>
+
+            {/* Sección de Ofertas - OCULTA (se gestiona desde pantalla de descuentos) */}
+            {false && (
+            <View style={[styles.section, { backgroundColor: theme.colors.surfaceContainer, borderColor: theme.colors.outline }]}>
+              <Title style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>🏷️ Ofertas y Descuentos</Title>
+              
+              <View style={styles.input}>
+                <TextInput
+                  label="Porcentaje de descuento"
+                  value={formData.discount_percentage}
+                  onChangeText={(text) => setFormData({ ...formData, discount_percentage: text })}
+                  keyboardType="numeric"
+                  placeholder="0"
+                  style={[styles.textInput, { backgroundColor: theme.colors.surfaceContainer }]}
+                theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
+                />
+                <Paragraph style={[styles.helpText, { color: theme.colors.onSurfaceVariant }]}>
+                  Porcentaje de descuento (ejemplo: 10 para 10%)
+                </Paragraph>
+              </View>
+
+              <View style={styles.input}>
+                <DatePickerComponent
+                  label="Fecha de inicio de oferta"
+                  value={formData.offer_start_date}
+                  onChange={(date) => setFormData({ ...formData, offer_start_date: date })}
+                  theme={theme}
+                />
+                <Paragraph style={[styles.helpText, { color: theme.colors.onSurfaceVariant }]}>
+                  Presiona el icono de calendario para seleccionar la fecha
+                </Paragraph>
+              </View>
+
+              <View style={styles.input}>
+                <DatePickerComponent
+                  label="Fecha de fin de oferta"
+                  value={formData.offer_end_date}
+                  onChange={(date) => setFormData({ ...formData, offer_end_date: date })}
+                  theme={theme}
+                />
+                <Paragraph style={[styles.helpText, { color: theme.colors.onSurfaceVariant }]}>
+                  Presiona el icono de calendario para seleccionar la fecha
+                </Paragraph>
+              </View>
+            </View>
+            )}
+
+            <View style={styles.input}>
+              <Button
+                mode="outlined"
+                onPress={handleImagePicker}
+                style={styles.imageButton}
+                icon="camera"
+              >
+                {selectedImage ? 'Cambiar imagen' : 'Seleccionar imagen'}
+              </Button>
+              {selectedImage && (
+                <Image source={selectedImage} style={styles.previewImage} />
+              )}
+            </View>
+
+            <View style={styles.formActions}>
+              <Button
+                mode="outlined"
+                onPress={() => {
+                  setShowForm(false);
+                  setEditingProduct(null);
+                  resetForm();
+                }}
+                style={styles.cancelButton}
+              >
+                Cancelar
+              </Button>
+              <Button
+                mode="contained"
+                onPress={handleSave}
+                style={styles.saveButton}
+              >
+                {editingProduct ? 'Actualizar' : 'Guardar'}
+              </Button>
+            </View>
+          </View>
+        </ScrollView>
+      </Modal>
+
+      {/* Modal para mostrar QR del producto */}
+      <Modal
+        visible={showQRModal}
+        onDismiss={() => setShowQRModal(false)}
+        contentContainerStyle={{ flex: 1 }}
+      >
+        <SimpleQRGenerator
+          product={selectedProductForQR}
+          onClose={() => setShowQRModal(false)}
         />
-      ) : (
-        <FlatList
-          data={filteredSales}
-          renderItem={renderSale}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={styles.listContainer}
-          style={styles.content}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-        />
-      )}
+      </Modal>
     </View>
   );
 };
@@ -184,114 +837,206 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
-    paddingTop: 20,
   },
   header: {
+    backgroundColor: '#fff',
+    padding: 20,
+    paddingTop: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  searchContainer: {
     padding: 16,
-    backgroundColor: 'white',
+    backgroundColor: '#fff',
+  },
+  searchInput: {
+    backgroundColor: '#f5f5f5',
+  },
+  productsList: {
+    padding: 16,
+  },
+  productCard: {
+    marginBottom: 12,
     elevation: 2,
   },
-  tabButtons: {
-    flexDirection: 'row',
-    marginBottom: 12,
-  },
-  tabButton: {
-    flex: 1,
-    marginHorizontal: 4,
-  },
-  searchBar: {
-    elevation: 0,
-  },
-  content: {
-    flex: 1,
-  },
-  listContainer: {
-    padding: 16,
-  },
-  itemCard: {
-    marginBottom: 12,
-    elevation: 2,
-  },
-  itemHeader: {
+  productHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
   },
-  itemInfo: {
+  productInfo: {
     flex: 1,
   },
-  itemName: {
+  productName: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: '#333',
   },
-  itemCode: {
+  productCode: {
     fontSize: 12,
     color: '#666',
     marginTop: 2,
   },
-  stockChip: {
-    marginLeft: 8,
+  productPrice: {
+    fontSize: 14,
+    color: '#2e7d32',
+    fontWeight: 'bold',
+    marginTop: 2,
   },
-  saleChip: {
-    backgroundColor: '#4CAF50',
-    marginLeft: 8,
+  productStock: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
   },
-  itemDetails: {
+  productCategory: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  productSupplier: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  productSaleType: {
+    fontSize: 12,
+    color: '#2196f3',
+    fontWeight: 'bold',
+    marginTop: 2,
+  },
+  productBulkInfo: {
+    fontSize: 11,
+    color: '#ff9800',
+    fontWeight: 'bold',
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  section: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#495057',
+    marginBottom: 12,
+    marginTop: 0,
+  },
+  productImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginLeft: 12,
+  },
+  productActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginTop: 12,
   },
-  itemPrice: {
-    fontSize: 14,
-    color: '#2c3e50',
-    fontWeight: 'bold',
+  actionButton: {
+    flex: 1,
+    marginHorizontal: 4,
   },
-  itemMin: {
-    fontSize: 12,
-    color: '#666',
+  deleteButton: {
+    borderColor: '#d32f2f',
   },
-  itemDate: {
-    fontSize: 12,
-    color: '#666',
+  fab: {
+    position: 'absolute',
+    margin: 16,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#2196f3',
   },
-  itemPayment: {
-    fontSize: 12,
-    color: '#4CAF50',
-    fontWeight: 'bold',
+  modalContainer: {
+    backgroundColor: 'white',
+    margin: 20,
+    borderRadius: 8,
+    maxHeight: '90%',
   },
-  saleItems: {
-    marginTop: 8,
+  modalContent: {
+    flex: 1,
   },
-  divider: {
-    marginVertical: 8,
-  },
-  itemsTitle: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#666',
-    marginBottom: 4,
-  },
-  saleItem: {
+  modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 4,
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
-  saleItemName: {
-    fontSize: 12,
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  form: {
+    padding: 16,
+  },
+  input: {
+    marginBottom: 16,
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  halfInput: {
     flex: 1,
-    color: '#2c3e50',
+    marginHorizontal: 4,
   },
-  saleItemQty: {
+  textInput: {
+    backgroundColor: '#f5f5f5',
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
+  },
+  helpText: {
     fontSize: 12,
     color: '#666',
-    marginHorizontal: 8,
+    marginTop: 4,
+    fontStyle: 'italic',
   },
-  saleItemPrice: {
-    fontSize: 12,
-    color: '#4CAF50',
-    fontWeight: 'bold',
+  chipContainer: {
+    flexDirection: 'row',
+  },
+  chip: {
+    marginRight: 8,
+  },
+  imageButton: {
+    marginBottom: 8,
+  },
+  previewImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    alignSelf: 'center',
+  },
+  formActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+  },
+  cancelButton: {
+    flex: 1,
+    marginRight: 8,
+  },
+  saveButton: {
+    flex: 1,
+    marginLeft: 8,
   },
 });
 

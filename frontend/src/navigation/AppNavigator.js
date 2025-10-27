@@ -11,36 +11,50 @@ import SalesScreen from '../screens/SalesScreen';
 import InventoryScreen from '../screens/InventoryScreen';
 import ReportsScreen from '../screens/ReportsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
-import ProductManagementScreen from '../screens/ProductManagementScreen';
 import SuppliersScreen from '../screens/SuppliersScreen';
 import CategoriesScreen from '../screens/CategoriesScreen';
 import ConfigScreen from '../screens/ConfigScreen';
 import ReceiptsScreen from '../screens/ReceiptsScreen';
-import ScannerScreen from '../screens/ScannerScreen';
+import ExpirationAlertsScreen from '../screens/ExpirationAlertsScreen';
+import DiscountsScreen from '../screens/DiscountsScreen';
+import UsersScreen from '../screens/UsersScreen';
+import SalesByUserScreen from '../screens/SalesByUserScreen';
 
 // Importar contexto de autenticación
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
+
+// MainStackNavigator eliminado porque solo contenía un hijo innecesario
 
 // Stack navigator para configuración
 function ConfigStackNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="ConfigMain" component={ConfigScreen} />
-      <Stack.Screen name="ProductManagement" component={ProductManagementScreen} />
       <Stack.Screen name="Categories" component={CategoriesScreen} />
       <Stack.Screen name="Suppliers" component={SuppliersScreen} />
-      <Stack.Screen name="Receipts" component={ReceiptsScreen} />
-      <Stack.Screen name="Scanner" component={ScannerScreen} />
-      <Stack.Screen name="Profile" component={ProfileScreen} />
+      <Stack.Screen name="Discounts" component={DiscountsScreen} />
+      <Stack.Screen name="Users" component={UsersScreen} />
+      <Stack.Screen name="SalesByUser" component={SalesByUserScreen} />
+      <Stack.Screen name="ExpirationAlerts" component={ExpirationAlertsScreen} />
+      <Stack.Screen name="ProfileNav" component={ProfileScreen} />
     </Stack.Navigator>
   );
 }
 
 // Navegación principal con tabs
 function MainTabNavigator() {
+  const { role, hasPermission } = useAuth();
+  const { theme } = useTheme();
+
+  // Verificar que el rol esté definido
+  if (!role) {
+    return null;
+  }
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -52,7 +66,7 @@ function MainTabNavigator() {
               iconName = 'home';
               break;
             case 'Products':
-              iconName = 'inventory';
+              iconName = 'inventory-2';
               break;
             case 'Sales':
               iconName = 'point-of-sale';
@@ -63,8 +77,14 @@ function MainTabNavigator() {
             case 'Reports':
               iconName = 'assessment';
               break;
+            case 'Receipts':
+              iconName = 'receipt';
+              break;
             case 'Config':
               iconName = 'settings';
+              break;
+            case 'Profile':
+              iconName = 'person';
               break;
             default:
               iconName = 'help';
@@ -72,41 +92,93 @@ function MainTabNavigator() {
 
           return <MaterialIcons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#2196F3',
-        tabBarInactiveTintColor: 'gray',
+        tabBarActiveTintColor: theme.colors.primary,
+        tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
+        tabBarStyle: {
+          backgroundColor: theme.colors.surface,
+          borderTopColor: theme.colors.outline,
+          borderTopWidth: 1,
+        },
         headerShown: false,
       })}
     >
-      <Tab.Screen 
-        name="Home" 
-        component={HomeScreen} 
-        options={{ title: 'Inicio' }}
-      />
-      <Tab.Screen 
-        name="Products" 
-        component={ProductsScreen} 
-        options={{ title: 'Productos' }}
-      />
-      <Tab.Screen 
-        name="Sales" 
-        component={SalesScreen} 
-        options={{ title: 'Ventas' }}
-      />
-      <Tab.Screen 
-        name="Inventory" 
-        component={InventoryScreen} 
-        options={{ title: 'Inventario' }}
-      />
-      <Tab.Screen 
-        name="Reports" 
-        component={ReportsScreen} 
-        options={{ title: 'Reportes' }}
-      />
-      <Tab.Screen 
-        name="Config" 
-        component={ConfigStackNavigator} 
-        options={{ title: 'Config' }}
-      />
+      {/* Admin: Todas las pestañas */}
+      {role === 'admin' && (
+        <>
+          <Tab.Screen 
+            name="Home" 
+            component={HomeScreen} 
+            options={{ title: 'Inicio' }}
+          />
+          
+          {hasPermission('products', 'read') && (
+            <Tab.Screen 
+              name="Inventory" 
+              component={InventoryScreen} 
+              options={{ title: 'Inventario' }}
+            />
+          )}
+          
+          {(hasPermission('reports', 'daily') || hasPermission('reports', 'all')) && (
+            <Tab.Screen 
+              name="Reports" 
+              component={ReportsScreen} 
+              options={{ title: 'Reportes' }}
+            />
+          )}
+          
+          <Tab.Screen 
+            name="Receipts" 
+            component={ReceiptsScreen} 
+            options={{ title: 'Comprobantes' }}
+          />
+          
+          <Tab.Screen 
+            name="Config" 
+            component={ConfigStackNavigator} 
+            options={{ title: 'Config' }}
+          />
+        </>
+      )}
+      
+      {/* Cajero: Inicio, Productos, Nueva Venta, Mis Ventas y Perfil */}
+      {role === 'cajero' && (
+        <>
+          <Tab.Screen 
+            name="Home" 
+            component={HomeScreen} 
+            options={{ title: 'Inicio' }}
+          />
+          
+          {hasPermission('products', 'read') && (
+            <Tab.Screen 
+              name="Products" 
+              component={ProductsScreen} 
+              options={{ title: 'Productos' }}
+            />
+          )}
+          
+          {hasPermission('sales', 'create') && (
+            <Tab.Screen 
+              name="Sales" 
+              component={SalesScreen} 
+              options={{ title: 'Nueva Venta' }}
+            />
+          )}
+          
+          <Tab.Screen 
+            name="Receipts" 
+            component={ReceiptsScreen} 
+            options={{ title: 'Mis Ventas' }}
+          />
+          
+          <Tab.Screen 
+            name="Profile" 
+            component={ProfileScreen} 
+            options={{ title: 'Perfil' }}
+          />
+        </>
+      )}
     </Tab.Navigator>
   );
 }

@@ -1,97 +1,193 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import { Card, Title, Paragraph, Button } from 'react-native-paper';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, StyleSheet, ScrollView, Animated } from 'react-native';
+import { Card, Title, Paragraph, Button, ActivityIndicator } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
+import { AnimatedCard, AnimatedButton } from '../components/AnimatedComponents';
+import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+import { reportsService } from '../services/reportsService';
 
 const HomeScreen = ({ navigation }) => {
+  const { user, role } = useAuth();
+  const { theme } = useTheme();
+  const [stats, setStats] = useState({
+    total_products: 0,
+    daily_sales: { total_sales: 0, total_amount: 0 },
+    daily_profit: 0,
+    low_stock_products: 0
+  });
+  const [loading, setLoading] = useState(true);
+  
+  // Animaciones
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  // Cargar estadísticas reales
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const loadStats = async () => {
+    try {
+      setLoading(true);
+      const response = await reportsService.getSummary();
+      if (response.success) {
+        setStats(response.data);
+      }
+    } catch (error) {
+      console.error('Error cargando estadísticas:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Elementos del menú basados en permisos
   const menuItems = [
     {
       title: 'Productos',
       subtitle: 'Gestionar inventario',
-      icon: 'inventory',
-      color: '#2196F3',
+      icon: 'inventory-2',
+      color: theme.colors.primary,
       onPress: () => navigation.navigate('Products'),
     },
     {
       title: 'Ventas',
-      subtitle: 'Procesar ventas',
+      subtitle: 'Procesar transacciones',
       icon: 'point-of-sale',
-      color: '#4CAF50',
+      color: theme.colors.tertiary,
       onPress: () => navigation.navigate('Sales'),
     },
     {
       title: 'Inventario',
-      subtitle: 'Ver stock actual',
+      subtitle: 'Control de stock',
       icon: 'warehouse',
-      color: '#FF9800',
+      color: theme.colors.secondary,
       onPress: () => navigation.navigate('Inventory'),
     },
     {
       title: 'Reportes',
-      subtitle: 'Estadísticas y análisis',
+      subtitle: 'Análisis y estadísticas',
       icon: 'assessment',
-      color: '#9C27B0',
+      color: theme.colors.info,
       onPress: () => navigation.navigate('Reports'),
     },
   ];
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Title style={styles.title}>Sistema de Inventario</Title>
-        <Paragraph style={styles.subtitle}>
-          Bienvenido al sistema de gestión
-        </Paragraph>
-      </View>
+    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <Animated.View
+        style={[
+          styles.header,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
+        ]}
+      >
+        <View style={styles.welcomeContainer}>
+          <MaterialIcons name="store" size={40} color={theme.colors.primary} />
+          <View style={styles.welcomeText}>
+            <Title style={[styles.title, { color: theme.colors.onBackground }]}>¡Bienvenido!</Title>
+            <Paragraph style={[styles.subtitle, { color: theme.colors.onSurfaceVariant }]}>
+              {user?.username || 'Usuario'} - {role === 'admin' ? '👑 Administrador' : '💰 Cajero'}
+            </Paragraph>
+          </View>
+        </View>
+      </Animated.View>
 
       <View style={styles.menu}>
         {menuItems.map((item, index) => (
-          <Card key={index} style={[styles.card, { borderLeftColor: item.color }]}>
+          <AnimatedCard
+            key={index}
+            style={[
+              styles.card,
+              { 
+                borderLeftColor: item.color, 
+                borderLeftWidth: 4,
+                backgroundColor: theme.colors.surface
+              }
+            ]}
+            onPress={item.onPress}
+            elevation={3}
+          >
             <Card.Content style={styles.cardContent}>
               <View style={styles.cardHeader}>
-                <MaterialIcons 
-                  name={item.icon} 
-                  size={32} 
-                  color={item.color} 
-                  style={styles.icon}
-                />
-                <View style={styles.textContainer}>
-                  <Title style={styles.cardTitle}>{item.title}</Title>
-                  <Paragraph style={styles.cardSubtitle}>{item.subtitle}</Paragraph>
+                <View style={[styles.iconContainer, { backgroundColor: item.color + '20' }]}>
+                  <MaterialIcons name={item.icon} size={32} color={item.color} />
                 </View>
+                <View style={styles.cardText}>
+                  <Title style={[styles.cardTitle, { color: theme.colors.onSurface }]}>{item.title}</Title>
+                  <Paragraph style={[styles.cardSubtitle, { color: theme.colors.onSurfaceVariant }]}>{item.subtitle}</Paragraph>
+                </View>
+                <MaterialIcons name="chevron-right" size={24} color={theme.colors.onSurfaceVariant} />
               </View>
-              <Button
-                mode="contained"
-                onPress={item.onPress}
-                style={[styles.button, { backgroundColor: item.color }]}
-                labelStyle={styles.buttonLabel}
-              >
-                Acceder
-              </Button>
             </Card.Content>
-          </Card>
+          </AnimatedCard>
         ))}
       </View>
 
-      <Card style={styles.statsCard}>
-        <Card.Content>
-          <Title>Resumen Rápido</Title>
-          <View style={styles.stats}>
-            <View style={styles.statItem}>
-              <Paragraph style={styles.statNumber}>0</Paragraph>
-              <Paragraph style={styles.statLabel}>Productos</Paragraph>
-            </View>
-            <View style={styles.statItem}>
-              <Paragraph style={styles.statNumber}>0</Paragraph>
-              <Paragraph style={styles.statLabel}>Ventas Hoy</Paragraph>
-            </View>
-            <View style={styles.statItem}>
-              <Paragraph style={styles.statNumber}>0</Paragraph>
-              <Paragraph style={styles.statLabel}>Stock Bajo</Paragraph>
-            </View>
-          </View>
-        </Card.Content>
-      </Card>
+      <Animated.View
+        style={[
+          styles.statsContainer,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
+        ]}
+      >
+        <Card style={[styles.statsCard, { backgroundColor: theme.colors.surface }]}>
+          <Card.Content>
+            <Title style={[styles.statsTitle, { color: theme.colors.onSurface }]}>📊 Resumen del Sistema</Title>
+            {loading ? (
+              <ActivityIndicator animating={true} color={theme.colors.primary} style={{ marginVertical: 20 }} />
+            ) : (
+              <View style={styles.statsGrid}>
+                <View style={styles.statItem}>
+                  <MaterialIcons name="inventory-2" size={24} color={theme.colors.primary} />
+                  <Paragraph style={[styles.statNumber, { color: theme.colors.primary }]}>{stats.total_products}</Paragraph>
+                  <Paragraph style={[styles.statLabel, { color: theme.colors.onSurfaceVariant }]}>Productos</Paragraph>
+                </View>
+                <View style={styles.statItem}>
+                  <MaterialIcons name="point-of-sale" size={24} color={theme.colors.tertiary} />
+                  <Paragraph style={[styles.statNumber, { color: theme.colors.tertiary }]}>{stats.daily_sales?.total_sales || 0}</Paragraph>
+                  <Paragraph style={[styles.statLabel, { color: theme.colors.onSurfaceVariant }]}>Ventas Hoy</Paragraph>
+                </View>
+                <View style={styles.statItem}>
+                  <MaterialIcons name="attach-money" size={24} color={theme.colors.secondary} />
+                  <Paragraph style={[styles.statNumber, { color: theme.colors.secondary }]}>
+                    ${stats.daily_sales?.total_amount ? Number(stats.daily_sales.total_amount).toFixed(0) : '0'}
+                  </Paragraph>
+                  <Paragraph style={[styles.statLabel, { color: theme.colors.onSurfaceVariant }]}>Ingresos</Paragraph>
+                </View>
+                {role === 'admin' && (
+                  <View style={styles.statItem}>
+                    <MaterialIcons name="trending-up" size={24} color={theme.colors.success || '#4CAF50'} />
+                    <Paragraph style={[styles.statNumber, { color: theme.colors.success || '#4CAF50' }]}>
+                      ${stats.daily_profit ? Number(stats.daily_profit).toFixed(0) : '0'}
+                    </Paragraph>
+                    <Paragraph style={[styles.statLabel, { color: theme.colors.onSurfaceVariant }]}>Ganancias</Paragraph>
+                  </View>
+                )}
+              </View>
+            )}
+          </Card.Content>
+        </Card>
+      </Animated.View>
     </ScrollView>
   );
 };
@@ -99,86 +195,90 @@ const HomeScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
-    paddingTop: 20,
   },
   header: {
     padding: 16,
     paddingTop: 20,
-    backgroundColor: '#fff',
-    marginBottom: 8,
+  },
+  welcomeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  welcomeText: {
+    marginLeft: 16,
+    flex: 1,
   },
   title: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: 'bold',
-    textAlign: 'center',
-    color: '#2c3e50',
+    marginBottom: 4,
   },
   subtitle: {
-    textAlign: 'center',
-    color: '#7f8c8d',
-    marginTop: 4,
-    fontSize: 14,
+    fontSize: 16,
   },
   menu: {
-    padding: 8,
+    padding: 16,
   },
   card: {
     marginBottom: 12,
-    borderLeftWidth: 4,
-    elevation: 2,
+    borderRadius: 12,
   },
   cardContent: {
-    paddingVertical: 15,
+    padding: 16,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 15,
   },
-  icon: {
-    marginRight: 15,
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
   },
-  textContainer: {
+  cardText: {
     flex: 1,
   },
   cardTitle: {
     fontSize: 18,
-    marginBottom: 5,
+    fontWeight: '600',
+    marginBottom: 4,
   },
   cardSubtitle: {
-    color: '#666',
     fontSize: 14,
   },
-  button: {
-    alignSelf: 'flex-end',
-  },
-  buttonLabel: {
-    color: '#fff',
+  statsContainer: {
+    padding: 16,
   },
   statsCard: {
-    margin: 10,
-    elevation: 2,
+    borderRadius: 12,
   },
-  stats: {
+  statsTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  statsGrid: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginTop: 15,
   },
   statItem: {
     alignItems: 'center',
+    flex: 1,
   },
   statNumber: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#2196F3',
+    marginTop: 4,
   },
   statLabel: {
     fontSize: 12,
-    color: '#666',
-    marginTop: 5,
+    marginTop: 4,
+    textAlign: 'center',
   },
 });
 
 export default HomeScreen;
-

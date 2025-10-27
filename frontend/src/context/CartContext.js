@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getFinalPrice } from '../utils/promotionUtils';
+import { voiceSearchService } from '../services/voiceSearchService';
 
 const CartContext = createContext();
 
@@ -91,17 +93,39 @@ export const CartProvider = ({ children }) => {
             ? { ...item, quantity: item.quantity + 1 }
             : item
         ));
+        
+        // Hablar que se actualizó la cantidad
+        voiceSearchService.speakProductAdded(product.name);
       } else {
+        // Calcular precio con descuento si aplica
+        // Log simplificado
+        if (product.has_discount) {
+          console.log('🛒 Producto con descuento:', product.name, 'Precio:', product.discounted_price);
+        }
+        
+        let finalPrice = getFinalPrice(product);
+        
+        // Si el producto tiene un precio con descuento del sistema, usar ese
+        if (product.discounted_price !== undefined && product.discounted_price !== null) {
+          finalPrice = product.discounted_price;
+        }
+        
         setCart([...cart, {
           id: product.id,
           name: product.name,
           code: product.code,
-          price: parseFloat(product.sale_price),
+          price: finalPrice,
+          original_price: product.original_price || parseFloat(product.sale_price), // Guardar precio original
+          discount_percentage: product.discount_percentage || 0, // Guardar descuento
           quantity: 1,
           image_url: product.image_url,
           stock: product.stock,
-          sale_type: product.sale_type
+          sale_type: product.sale_type,
+          has_discount: product.has_discount || false
         }]);
+        
+        // Hablar que se agregó el producto
+        voiceSearchService.speakProductAdded(product.name);
       }
       return true;
     }
@@ -140,19 +164,29 @@ export const CartProvider = ({ children }) => {
         name: product.name,
         code: product.code,
         price: calculateBulkPrice(product, weight),
+        original_price: product.original_price || parseFloat(product.price_per_unit || 0), // Guardar precio original por unidad
+        discount_percentage: product.discount_percentage || 0, // Guardar descuento
         weight: weight,
         quantity: 1, // Para compatibilidad
         image_url: product.image_url,
         stock: product.stock_in_units,
         sale_type: product.sale_type,
-        unit_of_measure: product.unit_of_measure
+        unit_of_measure: product.unit_of_measure,
+        has_discount: product.has_discount || false
       }]);
     }
     return true;
   };
 
   const calculateBulkPrice = (product, weight) => {
-    const pricePerUnit = parseFloat(product.price_per_unit || 0);
+    // Obtener precio por unidad
+    let pricePerUnit = getFinalPrice(product);
+    
+    // Si el producto tiene un precio con descuento del sistema, usar ese
+    if (product.discounted_price !== undefined && product.discounted_price !== null) {
+      pricePerUnit = product.discounted_price;
+    }
+    
     return pricePerUnit * weight;
   };
 
@@ -162,7 +196,12 @@ export const CartProvider = ({ children }) => {
 
     if (newQuantity <= 0) {
       setCart(cart.filter(item => item.id !== productId));
+      // Hablar que se eliminó el producto
+      voiceSearchService.speakStatus(`${cartItem.name} eliminado`, { rate: 0.85 });
     } else {
+      const oldQuantity = cartItem.sale_type === 'weight' ? cartItem.weight : cartItem.quantity;
+      const isIncreasing = newQuantity > oldQuantity;
+      
       // Para productos a granel, newQuantity es el peso
       if (cartItem.sale_type === 'weight') {
         if (newQuantity > cartItem.stock) {
@@ -179,6 +218,13 @@ export const CartProvider = ({ children }) => {
               }
             : item
         ));
+        
+        // Hablar la cantidad de forma inteligente
+        if (newQuantity === 1) {
+          voiceSearchService.speakStatus('1 kilo', { rate: 0.9 });
+        } else {
+          voiceSearchService.speakStatus(`${newQuantity.toFixed(2)} kilos`, { rate: 0.9 });
+        }
       } else {
         // Producto por unidad (lógica original)
         if (newQuantity > cartItem.stock) {
@@ -191,6 +237,11 @@ export const CartProvider = ({ children }) => {
             ? { ...item, quantity: newQuantity }
             : item
         ));
+        
+        // Hablar solo si es más de 1 unidad para no saturar
+        if (newQuantity > 1) {
+          voiceSearchService.speakStatus(`${newQuantity} unidades`, { rate: 0.9 });
+        }
       }
     }
     return true;

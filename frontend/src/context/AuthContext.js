@@ -8,6 +8,8 @@ const initialState = {
   token: null,
   isAuthenticated: false,
   isLoading: true,
+  permissions: null,
+  role: null,
 };
 
 const authReducer = (state, action) => {
@@ -17,6 +19,8 @@ const authReducer = (state, action) => {
         ...state,
         user: action.payload.user,
         token: action.payload.token,
+        permissions: action.payload.permissions,
+        role: action.payload.role,
         isAuthenticated: true,
         isLoading: false,
       };
@@ -25,6 +29,8 @@ const authReducer = (state, action) => {
         ...state,
         user: null,
         token: null,
+        permissions: null,
+        role: null,
         isAuthenticated: false,
         isLoading: false,
       };
@@ -38,6 +44,8 @@ const authReducer = (state, action) => {
         ...state,
         token: action.payload.token,
         user: action.payload.user,
+        permissions: action.payload.permissions,
+        role: action.payload.role,
         isAuthenticated: !!action.payload.token,
         isLoading: false,
       };
@@ -58,11 +66,18 @@ export const AuthProvider = ({ children }) => {
     try {
       const token = await AsyncStorage.getItem('token');
       const user = await AsyncStorage.getItem('user');
+      const permissions = await AsyncStorage.getItem('permissions');
+      const role = await AsyncStorage.getItem('role');
       
       if (token && user) {
         dispatch({
           type: 'RESTORE_TOKEN',
-          payload: { token, user: JSON.parse(user) },
+          payload: { 
+            token, 
+            user: JSON.parse(user),
+            permissions: permissions ? JSON.parse(permissions) : null,
+            role: role || null
+          },
         });
       } else {
         dispatch({ type: 'SET_LOADING', payload: false });
@@ -73,14 +88,20 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (userData, token) => {
+  const login = async (userData, token, permissions, role) => {
     try {
       await AsyncStorage.setItem('token', token);
       await AsyncStorage.setItem('user', JSON.stringify(userData));
+      if (permissions) {
+        await AsyncStorage.setItem('permissions', JSON.stringify(permissions));
+      }
+      if (role) {
+        await AsyncStorage.setItem('role', role);
+      }
       
       dispatch({
         type: 'LOGIN_SUCCESS',
-        payload: { user: userData, token },
+        payload: { user: userData, token, permissions, role },
       });
     } catch (error) {
       console.error('Error guardando datos de login:', error);
@@ -92,6 +113,8 @@ export const AuthProvider = ({ children }) => {
     try {
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('user');
+      await AsyncStorage.removeItem('permissions');
+      await AsyncStorage.removeItem('role');
       dispatch({ type: 'LOGOUT' });
     } catch (error) {
       console.error('Error en logout:', error);
@@ -102,6 +125,13 @@ export const AuthProvider = ({ children }) => {
     ...state,
     login,
     logout,
+    // Funciones de utilidad para permisos
+    hasPermission: (resource, action) => {
+      if (!state.permissions) return false;
+      return state.permissions[resource] && state.permissions[resource][action];
+    },
+    isAdmin: () => state.role === 'admin',
+    isCashier: () => state.role === 'cajero',
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

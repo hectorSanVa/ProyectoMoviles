@@ -3,8 +3,10 @@ import { View, StyleSheet, FlatList, RefreshControl, Alert } from 'react-native'
 import { Card, Title, Paragraph, Button, Searchbar, FAB, TextInput, IconButton } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import { categoryService } from '../services/categoryService';
+import { useTheme } from '../context/ThemeContext';
 
 const CategoriesScreen = () => {
+  const { theme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [categories, setCategories] = useState([]);
@@ -119,13 +121,13 @@ const CategoriesScreen = () => {
   };
 
   const renderCategory = ({ item }) => (
-    <Card style={styles.categoryCard}>
+    <Card style={[styles.categoryCard, { backgroundColor: theme.colors.surface }]}>
       <Card.Content>
         <View style={styles.categoryHeader}>
           <View style={styles.categoryInfo}>
-            <Title style={styles.categoryName}>{item.name}</Title>
+            <Title style={[styles.categoryName, { color: theme.colors.onSurface }]}>{item.name}</Title>
             {item.description && (
-              <Paragraph style={styles.categoryDescription}>{item.description}</Paragraph>
+              <Paragraph style={[styles.categoryDescription, { color: theme.colors.onSurfaceVariant }]}>{item.description}</Paragraph>
             )}
           </View>
           <View style={styles.categoryActions}>
@@ -133,13 +135,13 @@ const CategoriesScreen = () => {
               icon="pencil"
               size={20}
               onPress={() => openForm(item)}
-              iconColor="#2196F3"
+              iconColor={theme.colors.primary}
             />
             <IconButton
               icon="delete"
               size={20}
               onPress={() => handleDelete(item)}
-              iconColor="#F44336"
+              iconColor={theme.colors.error}
             />
           </View>
         </View>
@@ -154,14 +156,15 @@ const CategoriesScreen = () => {
 
   if (showForm) {
     return (
-      <View style={styles.container}>
-        <View style={styles.formHeader}>
-          <Title style={styles.formTitle}>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View style={[styles.formHeader, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.outline }]}>
+          <Title style={[styles.formTitle, { color: theme.colors.onSurface }]}>
             {editingCategory ? 'Editar Categoría' : 'Nueva Categoría'}
           </Title>
           <IconButton
             icon="close"
             size={24}
+            iconColor={theme.colors.onSurfaceVariant}
             onPress={closeForm}
           />
         </View>
@@ -171,7 +174,8 @@ const CategoriesScreen = () => {
             label="Nombre de la Categoría *"
             value={formData.name}
             onChangeText={(text) => setFormData({ ...formData, name: text })}
-            style={styles.input}
+            style={[styles.input, { backgroundColor: theme.colors.surfaceContainer }]}
+            theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
             mode="outlined"
           />
 
@@ -179,7 +183,8 @@ const CategoriesScreen = () => {
             label="Descripción"
             value={formData.description}
             onChangeText={(text) => setFormData({ ...formData, description: text })}
-            style={styles.input}
+            style={[styles.input, { backgroundColor: theme.colors.surfaceContainer }]}
+            theme={{ colors: { primary: theme.colors.primary, text: theme.colors.onSurface, placeholder: theme.colors.onSurfaceVariant, outline: theme.colors.outline } }}
             mode="outlined"
             multiline
             numberOfLines={3}
@@ -191,6 +196,8 @@ const CategoriesScreen = () => {
               mode="outlined"
               onPress={closeForm}
               style={styles.cancelButton}
+              theme={{ colors: { outline: theme.colors.outline } }}
+              textColor={theme.colors.onSurfaceVariant}
             >
               Cancelar
             </Button>
@@ -198,6 +205,8 @@ const CategoriesScreen = () => {
               mode="contained"
               onPress={handleSave}
               style={styles.saveButton}
+              buttonColor={theme.colors.primary}
+              textColor={theme.colors.onPrimary}
             >
               {editingCategory ? 'Actualizar' : 'Crear'}
             </Button>
@@ -208,13 +217,16 @@ const CategoriesScreen = () => {
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
         <Searchbar
           placeholder="Buscar categorías..."
           onChangeText={handleSearch}
           value={searchQuery}
-          style={styles.searchBar}
+          style={[styles.searchBar, { backgroundColor: theme.colors.surfaceContainer }]}
+          inputStyle={{ color: theme.colors.onSurface }}
+          placeholderTextColor={theme.colors.onSurfaceVariant}
+          iconColor={theme.colors.onSurfaceVariant}
         />
       </View>
 
@@ -230,8 +242,9 @@ const CategoriesScreen = () => {
       />
 
       <FAB
-        style={styles.fab}
+        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
         icon="plus"
+        color={theme.colors.onPrimary}
         onPress={() => openForm()}
         label="Nueva Categoría"
       />

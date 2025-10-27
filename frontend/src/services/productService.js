@@ -46,6 +46,25 @@ export const productService = {
       formData.append('price_per_unit', productData.price_per_unit?.toString() || '');
       formData.append('stock_in_units', productData.stock_in_units?.toString() || '');
       
+      // Agregar campos de vencimiento
+      if (productData.expiration_date) {
+        formData.append('expiration_date', productData.expiration_date);
+      }
+      if (productData.alert_days_before_expiration) {
+        formData.append('alert_days_before_expiration', productData.alert_days_before_expiration.toString());
+      }
+      
+      // Agregar campos de ofertas
+      if (productData.discount_percentage) {
+        formData.append('discount_percentage', productData.discount_percentage.toString());
+      }
+      if (productData.offer_start_date) {
+        formData.append('offer_start_date', productData.offer_start_date);
+      }
+      if (productData.offer_end_date) {
+        formData.append('offer_end_date', productData.offer_end_date);
+      }
+      
       // Agregar imagen si existe
       if (productData.image) {
         formData.append('image', {
@@ -93,6 +112,25 @@ export const productService = {
       formData.append('price_per_unit', productData.price_per_unit?.toString() || '');
       formData.append('stock_in_units', productData.stock_in_units?.toString() || '');
       
+      // Agregar campos de vencimiento
+      if (productData.expiration_date) {
+        formData.append('expiration_date', productData.expiration_date);
+      }
+      if (productData.alert_days_before_expiration) {
+        formData.append('alert_days_before_expiration', productData.alert_days_before_expiration.toString());
+      }
+      
+      // Agregar campos de ofertas
+      if (productData.discount_percentage) {
+        formData.append('discount_percentage', productData.discount_percentage.toString());
+      }
+      if (productData.offer_start_date) {
+        formData.append('offer_start_date', productData.offer_start_date);
+      }
+      if (productData.offer_end_date) {
+        formData.append('offer_end_date', productData.offer_end_date);
+      }
+      
       // Agregar imagen si existe
       if (productData.image) {
         formData.append('image', {
@@ -129,6 +167,28 @@ export const productService = {
   getByCode: async (code) => {
     try {
       const response = await api.get(`/products/code/${code}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Error de conexión' };
+    }
+  },
+
+  // Obtener productos próximos a vencer
+  getNearExpiration: async (days = 7) => {
+    try {
+      const response = await api.get(`/products/near-expiration`, { 
+        params: { days } 
+      });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Error de conexión' };
+    }
+  },
+
+  // Obtener productos vencidos
+  getExpired: async () => {
+    try {
+      const response = await api.get('/products/expired');
       return response.data;
     } catch (error) {
       throw error.response?.data || { message: 'Error de conexión' };

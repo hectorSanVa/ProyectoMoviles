@@ -15,7 +15,7 @@ const reportsController = {
           DATE(created_at) as date,
           COUNT(*) as total_sales,
           SUM(total) as total_amount,
-          AVG(total) as average_sale
+          AVG(total) as average_amount
         FROM sales 
         WHERE DATE(created_at) = $1
         GROUP BY DATE(created_at)
@@ -27,7 +27,7 @@ const reportsController = {
           date: targetDate,
           total_sales: 0,
           total_amount: 0,
-          average_sale: 0
+          average_amount: 0
         }
       });
     } catch (error) {
@@ -85,7 +85,7 @@ const reportsController = {
           min_stock,
           sale_price
         FROM products 
-        WHERE stock < min_stock AND is_active = true
+        WHERE stock > 0 AND stock < min_stock AND is_active = true
         ORDER BY (stock - min_stock) ASC
       `);
 
@@ -119,22 +119,33 @@ const reportsController = {
         WHERE DATE(created_at) = $1
       `, [todayStr]);
 
+      // Calcular ganancias del día (precio de venta - precio de compra)
+      const profit = await query(`
+        SELECT 
+          COALESCE(SUM(si.quantity * (p.sale_price - p.purchase_price)), 0) as total_profit
+        FROM sale_items si
+        JOIN products p ON si.product_id = p.id
+        JOIN sales s ON si.sale_id = s.id
+        WHERE DATE(s.created_at) = $1
+      `, [todayStr]);
+
       // Total de productos
       const totalProducts = await query(`
         SELECT COUNT(*) as count FROM products WHERE is_active = true
       `);
 
-      // Productos con stock bajo
+      // Productos con stock bajo (solo los que tienen stock > 0 y < min_stock)
       const lowStock = await query(`
         SELECT COUNT(*) as count 
         FROM products 
-        WHERE stock < min_stock AND is_active = true
+        WHERE stock > 0 AND stock < min_stock AND is_active = true
       `);
 
       res.json({
         success: true,
         data: {
           daily_sales: dailySales.rows[0],
+          daily_profit: profit.rows[0].total_profit,
           total_products: totalProducts.rows[0].count,
           low_stock_products: lowStock.rows[0].count
         }
