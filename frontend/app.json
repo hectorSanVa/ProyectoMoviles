@@ -35,11 +35,6 @@
       "targetSdkVersion": 34
     },
     "web": {},
-    "plugins": [
-      "expo-barcode-scanner",
-      "expo-camera",
-      "expo-speech"
-    ],
     "extra": {
       "eas": {
         "projectId": "de64d617-98ca-4617-a0e2-a33ee2483032"
