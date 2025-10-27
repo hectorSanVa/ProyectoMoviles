@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, FlatList, Alert, Modal, Image, KeyboardAvoidingView, Platform, AppState } from 'react-native';
+import { View, StyleSheet, ScrollView, FlatList, Alert, Modal, Image, KeyboardAvoidingView, Platform, AppState, TouchableOpacity } from 'react-native';
 import { Card, Title, Paragraph, Button, FAB, TextInput, Chip, Divider, Badge } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import { productService } from '../services/productService';
@@ -325,19 +325,26 @@ const SalesScreen = ({ navigation }) => {
   };
 
   const syncPendingSales = async () => {
-    if (!isOnline) return;
-    
     try {
+      console.log('🔄 Iniciando sincronización de ventas pendientes...');
+      console.log(`📊 Hay ${pendingSalesCount} ventas pendientes`);
+      
       const result = await offlineSyncService.syncPendingSales((progress) => {
         console.log(`🔄 Sincronizando... ${progress.synced}/${progress.total}`);
       });
       
       if (result.synced > 0) {
         console.log(`✅ ${result.synced} venta(s) sincronizada(s)`);
+        Alert.alert('Sincronización exitosa', `${result.synced} venta(s) sincronizada(s)`);
+        loadPendingSalesCount();
+      } else if (result.failed > 0) {
+        console.warn(`⚠️ ${result.failed} venta(s) no se pudieron sincronizar`);
+        Alert.alert('Sincronización incompleta', `${result.synced} sincronizadas, ${result.failed} fallidas. Intentará de nuevo más tarde.`);
         loadPendingSalesCount();
       }
     } catch (error) {
-      console.error('Error sincronizando ventas pendientes:', error);
+      console.error('❌ Error sincronizando ventas pendientes:', error);
+      Alert.alert('Error de sincronización', 'Las ventas se guardarán cuando haya conexión');
     }
   };
 
@@ -388,9 +395,29 @@ const SalesScreen = ({ navigation }) => {
       } catch (error) {
         // Si falla, guardar localmente
         console.warn('⚠️ Sin conexión, guardando venta localmente...');
+        
+        // Preparar datos para comprobante (incluir toda la info necesaria)
+        const receiptDataToSave = {
+          ...saleData,
+          user_id: user.id,
+          cashier_name: user.username,
+          items: cart.map(item => ({
+            product_name: item.name,
+            product_id: item.id,
+            quantity: item.sale_type === 'weight' ? item.weight : item.quantity,
+            unit_price: item.sale_type === 'weight' ? item.price / item.weight : item.price,
+            weight: item.sale_type === 'weight' ? item.weight : null,
+            unit_of_measure: item.sale_type === 'weight' ? item.unit_of_measure : null,
+            sale_type: item.sale_type
+          }))
+        };
+        
         console.log('📦 Datos de la venta a guardar:', JSON.stringify(saleData, null, 2));
         try {
-          const offlineSale = await offlineSyncService.savePendingSale(saleData);
+          const offlineSale = await offlineSyncService.savePendingSale({
+            saleData: saleData,
+            receiptData: receiptDataToSave
+          });
           console.log('✅ Venta offline guardada correctamente:', offlineSale.id);
           saleResponse = { success: true, data: offlineSale };
           isOfflineSale = true;
@@ -636,9 +663,14 @@ const SalesScreen = ({ navigation }) => {
             {isOnline ? 'En línea' : 'Sin conexión'}
           </Paragraph>
           {pendingSalesCount > 0 && (
-            <Badge style={[styles.pendingBadge, { backgroundColor: '#FF9800' }]}>
-              {pendingSalesCount}
-            </Badge>
+            <TouchableOpacity onPress={syncPendingSales} style={styles.syncButton}>
+              <Badge style={[styles.pendingBadge, { backgroundColor: '#FF9800' }]}>
+                {pendingSalesCount}
+              </Badge>
+              <Paragraph style={{ color: '#FF9800', fontSize: 10, marginLeft: 4 }}>
+                Toca para sincronizar
+              </Paragraph>
+            </TouchableOpacity>
           )}
         </View>
 
@@ -905,6 +937,11 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     minWidth: 20,
     height: 20,
+  },
+  syncButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 8,
   },
   searchContainer: {
     flexDirection: 'row',
