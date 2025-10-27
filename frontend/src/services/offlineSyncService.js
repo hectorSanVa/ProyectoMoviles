@@ -66,8 +66,8 @@ export const offlineSyncService = {
     if (lockData) {
       try {
         const lock = JSON.parse(lockData);
-        // Si el lock tiene más de 2 minutos, liberarlo (probablemente quedó bloqueado)
-        if (lock.timestamp && (Date.now() - lock.timestamp > 120000)) {
+        // Si el lock tiene más de 30 segundos, liberarlo (probablemente quedó bloqueado)
+        if (lock.timestamp && (Date.now() - lock.timestamp > 30000)) {
           console.log('⚠️ Liberando lock antiguo...');
           await AsyncStorage.removeItem(SYNC_LOCK_KEY);
         } else {
@@ -90,6 +90,7 @@ export const offlineSyncService = {
       
       if (unsyncedSales.length === 0) {
         console.log('📭 No hay ventas pendientes de sincronizar');
+        await AsyncStorage.removeItem(SYNC_LOCK_KEY);
         return { synced: 0, failed: 0 };
       }
 

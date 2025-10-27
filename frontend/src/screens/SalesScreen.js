@@ -49,8 +49,8 @@ const SalesScreen = ({ navigation }) => {
       if (lock) {
         try {
           const lockData = JSON.parse(lock);
-          if (lockData.timestamp && (Date.now() - lockData.timestamp > 120000)) {
-            // Si el lock tiene más de 2 minutos, liberarlo
+          if (lockData.timestamp && (Date.now() - lockData.timestamp > 30000)) {
+            // Si el lock tiene más de 30 segundos, liberarlo
             AsyncStorage.removeItem('sync_lock');
             console.log('🗑️ Limpiando lock antiguo al iniciar');
           }
