@@ -97,13 +97,17 @@ export const offlineSyncService = {
           if (result.success && receiptData) {
             try {
               console.log('🧾 Generando comprobante para venta sincronizada...');
-              await receiptService.generateReceipt({
+              console.log(`📝 Número de venta REAL del servidor: ${result.data.sale_number}`);
+              
+              const receiptResult = await receiptService.generateReceipt({
                 ...receiptData,
                 sale_number: result.data.sale_number,
                 id: result.data.id,
                 user_id: result.data.user_id
               });
-              console.log('✅ Comprobante generado para venta sincronizada');
+              
+              console.log(`✅ Comprobante generado con número REAL: ${result.data.sale_number}`);
+              console.log(`📄 Nombre del archivo: ${receiptResult?.fileName}`);
             } catch (receiptError) {
               console.warn('⚠️ No se pudo generar comprobante para venta sincronizada:', receiptError);
               // No fallar la sincronización por esto
