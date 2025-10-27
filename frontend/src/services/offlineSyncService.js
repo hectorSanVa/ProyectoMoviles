@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from './api';
 import { salesService } from './salesService';
+import { receiptService } from './receiptService';
 
 const PENDING_SALES_KEY = 'pending_sales';
 const SYNC_LOCK_KEY = 'sync_lock';
@@ -101,6 +102,34 @@ export const offlineSyncService = {
         try {
           // Intentar sincronizar la venta
           const result = await salesService.create(sale);
+          
+          // Si la venta se sincronizó exitosamente, generar comprobante
+          if (result.success && result.data) {
+            try {
+              console.log('🧾 Generando comprobante para venta sincronizada...');
+              
+              // Formatear items para el comprobante
+              const receiptItems = (sale.items || []).map(item => ({
+                product_name: item.product_name || `Producto #${item.product_id}`,
+                quantity: item.quantity || item.weight || 1,
+                unit_price: item.price || 0,
+                weight: item.weight || null,
+                unit_of_measure: item.unit_of_measure || null,
+                sale_type: item.sale_type || 'unit'
+              }));
+              
+              const receiptData = {
+                ...result.data,
+                items: receiptItems
+              };
+              
+              await receiptService.generateReceipt(receiptData);
+              console.log(`✅ Comprobante generado con número real: ${result.data.sale_number}`);
+            } catch (receiptError) {
+              console.warn('⚠️ No se pudo generar comprobante para venta sincronizada:', receiptError);
+              // No fallar la sincronización por esto
+            }
+          }
           
           // Marcar como sincronizada
           await offlineSyncService.markSaleAsSynced(sale.id);

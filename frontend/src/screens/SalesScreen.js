@@ -392,10 +392,12 @@ const SalesScreen = ({ navigation }) => {
         change: paymentMethod === 'efectivo' ? change : null,
         items: cart.map(item => ({
           product_id: item.id,
+          product_name: item.name, // Agregar nombre para el comprobante
           quantity: item.sale_type === 'weight' ? item.weight : item.quantity,
           price: item.sale_type === 'weight' ? item.price / item.weight : item.price, // Precio unitario
           weight: item.sale_type === 'weight' ? item.weight : null,
-          unit_of_measure: item.sale_type === 'weight' ? item.unit_of_measure : null
+          unit_of_measure: item.sale_type === 'weight' ? item.unit_of_measure : null,
+          sale_type: item.sale_type || 'unit'
         }))
       };
 
