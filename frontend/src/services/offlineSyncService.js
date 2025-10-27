@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from './api';
 import { salesService } from './salesService';
-import { receiptService } from './receiptService';
 
 const PENDING_SALES_KEY = 'pending_sales';
 const SYNC_LOCK_KEY = 'sync_lock';
@@ -66,8 +65,8 @@ export const offlineSyncService = {
     if (lockData) {
       try {
         const lock = JSON.parse(lockData);
-        // Si el lock tiene más de 5 minutos, liberarlo (probablemente quedó bloqueado)
-        if (lock.timestamp && (Date.now() - lock.timestamp > 300000)) {
+        // Si el lock tiene más de 2 minutos, liberarlo (probablemente quedó bloqueado)
+        if (lock.timestamp && (Date.now() - lock.timestamp > 120000)) {
           console.log('⚠️ Liberando lock antiguo...');
           await AsyncStorage.removeItem(SYNC_LOCK_KEY);
         } else {
@@ -100,64 +99,8 @@ export const offlineSyncService = {
 
       for (const sale of unsyncedSales) {
         try {
-          // Extraer los datos de la venta (compatibilidad con formato viejo y nuevo)
-          const saleDataToSync = sale.saleData || sale;
-          const receiptData = sale.receiptData;
-          
           // Intentar sincronizar la venta
-          const result = await salesService.create(saleDataToSync);
-          
-          // Si la venta se sincronizó exitosamente y hay receiptData, generar comprobante
-          if (result.success && receiptData) {
-            try {
-              console.log('🧾 Generando comprobante para venta sincronizada...');
-              console.log(`📝 Número de venta REAL del servidor: ${result.data.sale_number}`);
-              
-              // Eliminar el comprobante OFFLINE anterior si existe
-              try {
-                const allReceipts = await receiptService.getAllReceipts();
-                const offlineReceipts = allReceipts.filter(r => 
-                  r.sale_number && r.sale_number.startsWith('OFFLINE-')
-                );
-                
-                console.log(`📋 Comprobantes OFFLINE encontrados: ${offlineReceipts.length}`);
-                
-                // Buscar comprobante OFFLINE que coincida
-                const receiptToDelete = offlineReceipts.find(r => {
-                  const sameTotal = Math.abs(Number(r.total) - Number(receiptData.total)) < 0.01;
-                  const sameCustomer = r.customer_name === receiptData.customer_name;
-                  const recent = !r.timestamp || (Date.now() - r.timestamp < 86400000);
-                  
-                  console.log(`🔍 Comprobante OFFLINE: total=${sameTotal}, cliente=${sameCustomer}, reciente=${recent}`);
-                  
-                  return sameTotal && sameCustomer && recent;
-                });
-                
-                if (receiptToDelete) {
-                  console.log(`🗑️ Eliminando comprobante OFFLINE: ${receiptToDelete.sale_number}`);
-                  await receiptService.deleteReceipt(receiptToDelete.id);
-                } else {
-                  console.log('⚠️ No se encontró comprobante OFFLINE coincidente');
-                }
-              } catch (deleteError) {
-                console.warn('⚠️ No se pudo eliminar comprobante OFFLINE:', deleteError);
-              }
-              
-              // Generar nuevo comprobante con número REAL
-              const receiptResult = await receiptService.generateReceipt({
-                ...receiptData,
-                sale_number: result.data.sale_number,
-                id: result.data.id,
-                user_id: result.data.user_id
-              });
-              
-              console.log(`✅ Comprobante generado con número REAL: ${result.data.sale_number}`);
-              console.log(`📄 Nombre del archivo: ${receiptResult?.fileName}`);
-            } catch (receiptError) {
-              console.warn('⚠️ No se pudo generar comprobante para venta sincronizada:', receiptError);
-              // No fallar la sincronización por esto
-            }
-          }
+          const result = await salesService.create(sale);
           
           // Marcar como sincronizada
           await offlineSyncService.markSaleAsSynced(sale.id);

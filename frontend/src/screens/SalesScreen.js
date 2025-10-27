@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, FlatList, Alert, Modal, Image, KeyboardAvoidingView, Platform, AppState, TouchableOpacity } from 'react-native';
 import { Card, Title, Paragraph, Button, FAB, TextInput, Chip, Divider, Badge } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { productService } from '../services/productService';
 import { salesService } from '../services/salesService';
 import { receiptService } from '../services/receiptService';
@@ -42,6 +43,24 @@ const SalesScreen = ({ navigation }) => {
     loadProducts();
     checkConnection();
     loadPendingSalesCount();
+    
+    // Limpiar locks antiguos al iniciar
+    AsyncStorage.getItem('sync_lock').then(lock => {
+      if (lock) {
+        try {
+          const lockData = JSON.parse(lock);
+          if (lockData.timestamp && (Date.now() - lockData.timestamp > 120000)) {
+            // Si el lock tiene más de 2 minutos, liberarlo
+            AsyncStorage.removeItem('sync_lock');
+            console.log('🗑️ Limpiando lock antiguo al iniciar');
+          }
+        } catch (e) {
+          // Si el lock no es válido JSON, eliminarlo
+          AsyncStorage.removeItem('sync_lock');
+          console.log('🗑️ Eliminando lock inválido al iniciar');
+        }
+      }
+    });
     
     // Verificar conexión periódicamente
     const interval = setInterval(() => {
@@ -380,21 +399,6 @@ const SalesScreen = ({ navigation }) => {
         }))
       };
 
-      // Preparar datos para comprobante (usado tanto para online como offline)
-      const receiptDataToSave = {
-        ...saleData,
-        user_id: user.id,
-        cashier_name: user.username,
-        items: cart.map(item => ({
-          product_name: item.name,
-          product_id: item.id,
-          quantity: item.sale_type === 'weight' ? item.weight : item.quantity,
-          unit_price: item.sale_type === 'weight' ? item.price / item.weight : item.price,
-          weight: item.sale_type === 'weight' ? item.weight : null,
-          unit_of_measure: item.sale_type === 'weight' ? item.unit_of_measure : null,
-          sale_type: item.sale_type
-        }))
-      };
 
       let saleResponse;
       let isOfflineSale = false;
@@ -413,10 +417,7 @@ const SalesScreen = ({ navigation }) => {
         console.warn('⚠️ Sin conexión, guardando venta localmente...');
         console.log('📦 Datos de la venta a guardar:', JSON.stringify(saleData, null, 2));
         try {
-          const offlineSale = await offlineSyncService.savePendingSale({
-            saleData: saleData,
-            receiptData: receiptDataToSave
-          });
+          const offlineSale = await offlineSyncService.savePendingSale(saleData);
           console.log('✅ Venta offline guardada correctamente:', offlineSale.id);
           saleResponse = { success: true, data: offlineSale };
           isOfflineSale = true;
@@ -429,34 +430,36 @@ const SalesScreen = ({ navigation }) => {
       }
 
       if (saleResponse.success) {
-        // Generar comprobante
-        // Para ventas offline, usar el receiptData que ya preparamos con número temporal
-        // Para ventas en línea, usar receiptDataToSave pero agregarle los datos del servidor
+        // Generar comprobante SOLO para ventas en línea
         const receiptData = isOfflineSale 
-          ? {
-              ...receiptDataToSave,
-              id: `temp_${Date.now()}`, // ID temporal para venta offline
-              sale_number: `OFFLINE-${Date.now()}` // Número temporal para venta offline
-            }
+          ? null // No generar comprobante para ventas offline
           : {
-              ...receiptDataToSave,
-              id: saleResponse.data.id,
-              sale_number: saleResponse.data.sale_number,
-              user_id: saleResponse.data.user_id
+              ...saleResponse.data,
+              user_id: user.id,
+              cashier_name: user.username,
+              items: cart.map(item => ({
+                product_name: item.name,
+                quantity: item.sale_type === 'weight' ? item.weight : item.quantity,
+                unit_price: item.sale_type === 'weight' ? item.price / item.weight : item.price,
+                weight: item.sale_type === 'weight' ? item.weight : null,
+                unit_of_measure: item.sale_type === 'weight' ? item.unit_of_measure : null,
+                sale_type: item.sale_type
+              }))
             };
         
         let receiptResult;
         
-        // Generar comprobante TANTO para ventas en línea como offline
-        try {
-          receiptResult = await receiptService.generateReceipt(receiptData);
-        } catch (receiptError) {
-          console.warn('⚠️ No se pudo generar comprobante:', receiptError);
-          // No fallar la venta por esto
+        // Generar comprobante SOLO para ventas en línea
+        if (!isOfflineSale && receiptData) {
+          try {
+            receiptResult = await receiptService.generateReceipt(receiptData);
+          } catch (receiptError) {
+            console.warn('⚠️ No se pudo generar comprobante:', receiptError);
+          }
         }
 
         const message = isOfflineSale 
-          ? `Venta guardada localmente (sin conexión). Se sincronizará automáticamente cuando haya internet.`
+          ? `Venta guardada localmente. Se sincronizará automáticamente cuando haya conexión.`
           : `Total: $${total.toFixed(2)}`;
 
         // Limpiar carrito de una vez (tanto para online como offline)
