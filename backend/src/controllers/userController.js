@@ -142,10 +142,10 @@ const userController = {
 
       // Insertar usuario
       const result = await query(`
-        INSERT INTO users (username, email, password_hash, role_id, name, role)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO users (username, email, password_hash, role_id)
+        VALUES ($1, $2, $3, $4)
         RETURNING id, username, email, role_id, created_at
-      `, [username, email, password_hash, roleId, username, role_name]);
+      `, [username, email, password_hash, roleId]);
 
       res.status(201).json({
         success: true,
