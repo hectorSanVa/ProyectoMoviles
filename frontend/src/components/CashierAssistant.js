@@ -144,7 +144,7 @@ const CashierAssistant = ({ total, cart, todayStats, products }) => {
     try {
       // Usar IA gratuita de Hugging Face
       const token = await AsyncStorage.getItem('token');
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.83:5000';
+      const apiUrl = 'https://inventario-api-7amo.onrender.com';
       const response = await fetch(`${apiUrl}/api/ai/chat`, {
         method: 'POST',
         headers: {
