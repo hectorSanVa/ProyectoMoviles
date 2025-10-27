@@ -276,13 +276,13 @@ const productController = {
 
       const result = await query(`
         INSERT INTO products (
-          name, code, description, price, purchase_price, sale_price,
+          name, code, description, purchase_price, sale_price,
           stock, min_stock, category_id, supplier_id, image_url, sale_type,
           unit_of_measure, price_per_unit, stock_in_units, expiration_date, alert_days_before_expiration
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         RETURNING id, name, code, sale_price, stock, image_url, sale_type, unit_of_measure, price_per_unit, stock_in_units, expiration_date, alert_days_before_expiration
       `, [
-        name, code, description, finalSalePrice, purchase_price, finalSalePrice,
+        name, code, description, purchase_price, finalSalePrice,
         finalStock, min_stock || 5, categoryId, supplierId, image_url, sale_type || 'unit',
         unit_of_measure || 'kg', price_per_unit || 0, finalStockInUnits, 
         expirationDate, alertDays
