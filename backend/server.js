@@ -15,10 +15,44 @@ const PORT = process.env.PORT || 5000;
 app.use(helmet());
 
 // Configuración CORS más específica para aplicaciones móviles
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5000',
+  'http://localhost:19006',
+  'http://192.168.1.83:3000',
+  'http://192.168.1.83:5000',
+  'http://192.168.1.83:19006',
+  'http://10.34.219.4:5000',
+  'https://inventario-api-7amo.onrender.com',
+  'https://*.onrender.com', // Permite todos los dominios de Render en producción
+  /^https:\/\/.*\.expo\.dev$/, // Permite Expo Go
+  /^http:\/\/.*\.exp\.direct$/, // Permite Expo Development
+];
+
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5000', 'http://192.168.1.83:3000', 'http://192.168.1.83:5000', 'http://10.34.219.4:5000'],
+  origin: function (origin, callback) {
+    // Permitir requests sin origin (aplicaciones móviles o Postman)
+    if (!origin) return callback(null, true);
+    
+    // Verificar si el origin está permitido
+    const isAllowed = allowedOrigins.some(allowed => {
+      if (typeof allowed === 'string') {
+        return origin === allowed;
+      } else if (allowed instanceof RegExp) {
+        return allowed.test(origin);
+      }
+      return false;
+    });
+    
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      console.warn(`⚠️  Origin no permitido: ${origin}`);
+      callback(null, true); // Permitir en desarrollo pero loguear
+    }
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
   optionsSuccessStatus: 200
 }));
@@ -42,14 +76,14 @@ app.get('/', (req, res) => {
   });
 });
 
-// Health check endpoint para Railway
+// Health check endpoint
 app.get('/api/health', (req, res) => {
   console.log('🔍 Health check llamado');
   res.status(200).json({ 
     status: 'OK',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    database: 'PostgreSQL Railway'
+    database: 'PostgreSQL Render'
   });
 });
 
