@@ -8,6 +8,18 @@ const SYNC_LOCK_KEY = 'sync_lock';
 
 export const offlineSyncService = {
   /**
+   * Liberar lock de sincronización (para debugging o forzar sincronización)
+   */
+  clearSyncLock: async () => {
+    try {
+      await AsyncStorage.removeItem(SYNC_LOCK_KEY);
+      console.log('✅ Lock de sincronización liberado manualmente');
+    } catch (error) {
+      console.error('❌ Error liberando lock:', error);
+    }
+  },
+
+  /**
    * Guardar una venta pendiente de sincronizar
    */
   savePendingSale: async (saleData) => {

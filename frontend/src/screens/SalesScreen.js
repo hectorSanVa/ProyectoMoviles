@@ -44,21 +44,18 @@ const SalesScreen = ({ navigation }) => {
     checkConnection();
     loadPendingSalesCount();
     
-    // Limpiar locks antiguos al iniciar
+    // Limpiar lock al iniciar (sin importar la edad)
     AsyncStorage.getItem('sync_lock').then(lock => {
       if (lock) {
         try {
           const lockData = JSON.parse(lock);
-          if (lockData.timestamp && (Date.now() - lockData.timestamp > 30000)) {
-            // Si el lock tiene más de 30 segundos, liberarlo
-            AsyncStorage.removeItem('sync_lock');
-            console.log('🗑️ Limpiando lock antiguo al iniciar');
-          }
+          const age = Date.now() - (lockData.timestamp || 0);
+          console.log(`🔓 Limpando lock de sincronización (edad: ${(age/1000).toFixed(1)}s)`);
         } catch (e) {
-          // Si el lock no es válido JSON, eliminarlo
-          AsyncStorage.removeItem('sync_lock');
-          console.log('🗑️ Eliminando lock inválido al iniciar');
+          console.log('🔓 Limpando lock inválido');
         }
+        // Siempre eliminar el lock al iniciar la app
+        AsyncStorage.removeItem('sync_lock');
       }
     });
     
