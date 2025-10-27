@@ -2,8 +2,8 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Configuración base de la API
-// URL del backend local conectado a PostgreSQL local
-const API_BASE_URL = 'http://192.168.1.83:5000/api';
+// URL del backend desplegado en Render
+const API_BASE_URL = 'https://inventario-api-7amo.onrender.com/api';
 
 // Crear instancia de axios
 const api = axios.create({
