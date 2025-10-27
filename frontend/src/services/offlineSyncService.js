@@ -116,16 +116,18 @@ export const offlineSyncService = {
 
   /**
    * Verificar si hay conexión a internet
-   * Nota: Timeout aumentado a 40s para dar tiempo a que Render Free despierte
+   * Estrategia: Siempre asumir online, pero guardar offline si falla
    */
   isOnline: async () => {
     try {
-      // Intentar hacer una petición simple al backend con timeout generoso
-      const response = await api.get('/api/health', { timeout: 40000 });
+      // Intentar petición al backend con timeout razonable
+      const response = await api.get('/api/health', { timeout: 10000 });
       return response.status === 200 || response.statusText === 'OK';
     } catch (error) {
-      console.log('⚠️ Servidor no responde, considerando offline:', error.message);
-      return false;
+      // Si falla, asumir que hay internet pero el backend está durmiendo
+      // Esto evita mostrar "offline" erróneamente cuando Render tarda en despertar
+      console.log('⚠️ Backend no responde inmediatamente, pero hay internet');
+      return true; // Considerar online para que la UI no muestre "sin conexión"
     }
   },
 
