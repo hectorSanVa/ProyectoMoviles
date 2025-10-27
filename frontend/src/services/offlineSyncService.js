@@ -113,34 +113,50 @@ export const offlineSyncService = {
 
       for (const sale of unsyncedSales) {
         try {
+          // Validar que la venta tenga items válidos
+          if (!sale.items || sale.items.length === 0 || !sale.items[0].product_id) {
+            console.warn(`⚠️ Venta ${sale.id} tiene formato inválido, eliminando...`);
+            await offlineSyncService.markSaleAsSynced(sale.id); // Eliminar
+            failed++;
+            continue;
+          }
+          
           // Intentar sincronizar la venta
           const result = await salesService.create(sale);
           
-          // Si la venta se sincronizó exitosamente, generar comprobante
-          if (result.success && result.data) {
+          // Si la venta se sincronizó exitosamente, generar comprobante con número real
+          if (result.success && result.data && sale.receiptItems) {
             try {
-              console.log('🧾 Generando comprobante para venta sincronizada...');
+              console.log('🧾 Generando comprobante con número real del servidor...');
               
-              // Formatear items para el comprobante
-              const receiptItems = (sale.items || []).map(item => ({
-                product_name: item.product_name || `Producto #${item.product_id}`,
-                quantity: item.quantity || item.weight || 1,
-                unit_price: item.price || 0,
-                weight: item.weight || null,
-                unit_of_measure: item.unit_of_measure || null,
-                sale_type: item.sale_type || 'unit'
-              }));
+              // Eliminar comprobante OFFLINE si existe (buscarlo por total y cliente)
+              try {
+                const allReceipts = await receiptService.getAllReceipts();
+                const offlineReceipt = allReceipts.find(r => {
+                  const matchesTotal = Math.abs(Number(r.total) - Number(sale.total)) < 0.01;
+                  const matchesCustomer = r.customer_name === (sale.customer_name || 'Cliente general');
+                  const isRecent = !r.timestamp || (Date.now() - r.timestamp < 300000); // 5 min
+                  return r.sale_number && r.sale_number.startsWith('OFFLINE-') && matchesTotal && matchesCustomer && isRecent;
+                });
+                
+                if (offlineReceipt) {
+                  await receiptService.deleteReceipt(offlineReceipt.id);
+                  console.log(`🗑️ Comprobante OFFLINE eliminado: ${offlineReceipt.sale_number}`);
+                }
+              } catch (deleteError) {
+                console.warn('⚠️ No se pudo eliminar comprobante OFFLINE:', deleteError);
+              }
               
+              // Generar nuevo comprobante con número real del servidor
               const receiptData = {
                 ...result.data,
-                items: receiptItems
+                items: sale.receiptItems
               };
               
               await receiptService.generateReceipt(receiptData);
               console.log(`✅ Comprobante generado con número real: ${result.data.sale_number}`);
             } catch (receiptError) {
               console.warn('⚠️ No se pudo generar comprobante para venta sincronizada:', receiptError);
-              // No fallar la sincronización por esto
             }
           }
           
@@ -172,7 +188,7 @@ export const offlineSyncService = {
 
   /**
    * Verificar si hay conexión a internet
-   * Estrategia: Siempre asumir online, pero guardar offline si falla
+   * Retorna true si hay conexión, false si realmente no hay internet
    */
   isOnline: async () => {
     try {
@@ -180,8 +196,13 @@ export const offlineSyncService = {
       const response = await api.get('/api/health', { timeout: 10000 });
       return response.status === 200 || response.statusText === 'OK';
     } catch (error) {
-      // Si falla, asumir que hay internet pero el backend está durmiendo
-      // Esto evita mostrar "offline" erróneamente cuando Render tarda en despertar
+      // Verificar si es un error de red real (sin conexión)
+      if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+        console.log('📴 Sin conexión a internet');
+        return false;
+      }
+      
+      // Si falla por otra razón (timeout, etc), asumir que hay internet pero el backend está durmiendo
       console.log('⚠️ Backend no responde inmediatamente, pero hay internet');
       return true; // Considerar online para que la UI no muestre "sin conexión"
     }

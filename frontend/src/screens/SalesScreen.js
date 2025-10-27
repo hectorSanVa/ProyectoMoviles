@@ -15,6 +15,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import QRCodeScanner from '../components/QRCodeScanner';
 import CashierAssistant from '../components/CashierAssistant';
+import ConnectionIndicator from '../components/ConnectionIndicator';
 
 const SalesScreen = ({ navigation }) => {
   const { theme } = useTheme();
@@ -34,14 +35,12 @@ const SalesScreen = ({ navigation }) => {
   const [products, setProducts] = useState([]);
   const [showPaymentDetails, setShowPaymentDetails] = useState(false);
   const [wasCartCleared, setWasCartCleared] = useState(false);
-  const [isOnline, setIsOnline] = useState(true);
   const [pendingSalesCount, setPendingSalesCount] = useState(0);
   const [todayStats, setTodayStats] = useState(null);
 
   // Cargar productos al iniciar
   useEffect(() => {
     loadProducts();
-    checkConnection();
     loadPendingSalesCount();
     
     // Limpiar lock al iniciar (sin importar la edad)
@@ -59,20 +58,16 @@ const SalesScreen = ({ navigation }) => {
       }
     });
     
-    // Verificar conexión periódicamente
+    // Cargar ventas pendientes periódicamente
     const interval = setInterval(() => {
-      checkConnection();
       loadPendingSalesCount();
     }, 10000); // Cada 10 segundos
 
     // Sincronizar cuando la app vuelve al foreground
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
-        checkConnection();
         loadPendingSalesCount();
-        if (isOnline) {
-          syncPendingSales();
-        }
+        syncPendingSales();
       }
     });
 
@@ -80,7 +75,7 @@ const SalesScreen = ({ navigation }) => {
       clearInterval(interval);
       subscription.remove();
     };
-  }, [isOnline]);
+  }, []);
 
   // Resetear vista de pagos cuando el carrito esté vacío o cuando se agrega el primer producto después de limpiar
   useEffect(() => {
@@ -324,12 +319,6 @@ const SalesScreen = ({ navigation }) => {
   };
 
   // Funciones de sincronización offline
-  const checkConnection = async () => {
-    const online = await offlineSyncService.isOnline();
-    setIsOnline(online);
-    console.log(`📶 Estado de conexión: ${online ? 'En línea' : 'Sin conexión'}`);
-  };
-
   const loadPendingSalesCount = async () => {
     try {
       const pendingSales = await offlineSyncService.getPendingSales();
@@ -379,6 +368,23 @@ const SalesScreen = ({ navigation }) => {
     }
 
     try {
+      // Preparar items para el backend (solo lo que necesita)
+      const backendItems = cart.map(item => ({
+        product_id: item.id,
+        quantity: item.sale_type === 'weight' ? item.weight : item.quantity,
+        price: item.sale_type === 'weight' ? item.price / item.weight : item.price
+      }));
+
+      // Preparar items para el comprobante (con toda la info)
+      const receiptItems = cart.map(item => ({
+        product_name: item.name,
+        quantity: item.sale_type === 'weight' ? item.weight : item.quantity,
+        unit_price: item.sale_type === 'weight' ? item.price / item.weight : item.price,
+        weight: item.sale_type === 'weight' ? item.weight : null,
+        unit_of_measure: item.sale_type === 'weight' ? item.unit_of_measure : null,
+        sale_type: item.sale_type || 'unit'
+      }));
+
       const saleData = {
         customer_name: customerName || 'Cliente general',
         payment_method: paymentMethod,
@@ -387,15 +393,8 @@ const SalesScreen = ({ navigation }) => {
         total: total,
         cash_received: paymentMethod === 'efectivo' ? parseFloat(cashReceived) : null,
         change: paymentMethod === 'efectivo' ? change : null,
-        items: cart.map(item => ({
-          product_id: item.id,
-          product_name: item.name, // Agregar nombre para el comprobante
-          quantity: item.sale_type === 'weight' ? item.weight : item.quantity,
-          price: item.sale_type === 'weight' ? item.price / item.weight : item.price, // Precio unitario
-          weight: item.sale_type === 'weight' ? item.weight : null,
-          unit_of_measure: item.sale_type === 'weight' ? item.unit_of_measure : null,
-          sale_type: item.sale_type || 'unit'
-        }))
+        items: backendItems, // Solo lo que el backend necesita
+        receiptItems: receiptItems // Info completa para el comprobante
       };
 
 
@@ -429,10 +428,25 @@ const SalesScreen = ({ navigation }) => {
       }
 
       if (saleResponse.success) {
-        // Generar comprobante SOLO para ventas en línea
+        // Generar comprobante para TODAS las ventas (online y offline)
         const receiptData = isOfflineSale 
-          ? null // No generar comprobante para ventas offline
+          ? {
+              // Para venta offline: usar datos temporales
+              user_id: user.id, // IMPORTANTE: Necesario para que aparezca en la lista del cajero
+              sale_number: `OFFLINE-${Date.now()}`,
+              created_at: new Date().toISOString(),
+              customer_name: customerName || 'Cliente general',
+              cashier_name: user.username,
+              subtotal: subtotal,
+              tax_amount: taxAmount,
+              total: total,
+              payment_method: paymentMethod,
+              cash_received: paymentMethod === 'efectivo' ? parseFloat(cashReceived) : 0,
+              change: paymentMethod === 'efectivo' ? change : 0,
+              items: receiptItems // Los items preparados para el comprobante
+            }
           : {
+              // Para venta online: usar datos del servidor
               ...saleResponse.data,
               user_id: user.id,
               cashier_name: user.username,
@@ -448,13 +462,14 @@ const SalesScreen = ({ navigation }) => {
         
         let receiptResult;
         
-        // Generar comprobante SOLO para ventas en línea
-        if (!isOfflineSale && receiptData) {
-          try {
-            receiptResult = await receiptService.generateReceipt(receiptData);
-          } catch (receiptError) {
-            console.warn('⚠️ No se pudo generar comprobante:', receiptError);
+        // Generar comprobante para TODAS las ventas
+        try {
+          receiptResult = await receiptService.generateReceipt(receiptData);
+          if (isOfflineSale) {
+            console.log('🧾 Comprobante OFFLINE generado con número temporal');
           }
+        } catch (receiptError) {
+          console.warn('⚠️ No se pudo generar comprobante:', receiptError);
         }
 
         const message = isOfflineSale 
@@ -472,10 +487,10 @@ const SalesScreen = ({ navigation }) => {
         // Si es venta offline y tiene comprobante, mostrarlo
         if (isOfflineSale && receiptResult?.success) {
           Alert.alert(
-            'Venta guardada offline',
-            `${message}\n\nComprobante generado: ${receiptResult.fileName}`,
+            'Venta guardada offline ✅',
+            `Comprobante generado: ${receiptResult.fileName}\n\n📋 Puedes ver este comprobante en la sección "Comprobantes". La venta se sincronizará cuando haya conexión.`,
             [
-              { text: 'Ver Comprobante', onPress: () => {
+              { text: 'Ver comprobante', onPress: () => {
                 Alert.alert('Comprobante de Venta', receiptResult.receiptText, [{ text: 'OK' }]);
               }},
               { text: 'OK' }
@@ -483,7 +498,7 @@ const SalesScreen = ({ navigation }) => {
           );
           return; // Salir temprano para ventas offline con comprobante
         } else if (isOfflineSale) {
-          Alert.alert('Venta guardada offline', message);
+          Alert.alert('Venta guardada offline ✅', message);
           return; // Salir temprano para ventas offline sin comprobante
         } else if (receiptResult?.success) {
           // Hablar el cambio si hay (en pesos mexicanos)
@@ -515,8 +530,8 @@ const SalesScreen = ({ navigation }) => {
           Alert.alert('Venta exitosa', `Total: $${total.toFixed(2)}\n\nError generando comprobante`);
         }
 
-        // Si estamos online y hay ventas pendientes, sincronizar
-        if (isOnline && pendingSalesCount > 0) {
+        // Si hay ventas pendientes, sincronizar
+        if (pendingSalesCount > 0) {
           syncPendingSales();
         }
       } else {
@@ -659,15 +674,14 @@ const SalesScreen = ({ navigation }) => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
+      <View style={{ marginTop: 5, paddingVertical: 2 }}>
+        <ConnectionIndicator />
+      </View>
       {/* Header con búsqueda */}
       <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
-        {/* Indicador de conexión y ventas pendientes */}
-        <View style={styles.connectionIndicator}>
-          <View style={[styles.statusDot, { backgroundColor: isOnline ? '#4CAF50' : '#f44336' }]} />
-          <Paragraph style={{ color: theme.colors.onSurface, fontSize: 12 }}>
-            {isOnline ? 'En línea' : 'Sin conexión'}
-          </Paragraph>
-          {pendingSalesCount > 0 && (
+        {/* Ventas pendientes de sincronizar */}
+        {pendingSalesCount > 0 && (
+          <View style={styles.connectionIndicator}>
             <TouchableOpacity onPress={syncPendingSales} style={styles.syncButton}>
               <Badge style={[styles.pendingBadge, { backgroundColor: '#FF9800' }]}>
                 {pendingSalesCount}
@@ -676,8 +690,8 @@ const SalesScreen = ({ navigation }) => {
                 Toca para sincronizar
               </Paragraph>
             </TouchableOpacity>
-          )}
-        </View>
+          </View>
+        )}
 
         <View style={styles.searchContainer}>
           <TextInput

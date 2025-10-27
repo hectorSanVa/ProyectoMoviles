@@ -5,6 +5,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { reportsService } from '../services/reportsService';
 import { useTheme } from '../context/ThemeContext';
+import ConnectionIndicator from '../components/ConnectionIndicator';
 
 const ReportsScreen = () => {
   const { theme } = useTheme();
@@ -84,6 +85,7 @@ const ReportsScreen = () => {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
     >
+      <ConnectionIndicator />
       <View style={styles.content}>
         {/* Resumen General */}
         {summary && (

@@ -13,6 +13,7 @@ import { Card, Title, Paragraph, Button, FAB, Portal, Modal } from 'react-native
 import { receiptService } from '../services/receiptService';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import ConnectionIndicator from '../components/ConnectionIndicator';
 
 const ReceiptsScreen = () => {
   const { theme } = useTheme();
@@ -156,6 +157,9 @@ const ReceiptsScreen = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View style={{ marginTop: 35, paddingVertical: 2 }}>
+        <ConnectionIndicator />
+      </View>
       <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
         <Title style={[styles.headerTitle, { color: theme.colors.onSurface }]}>Comprobantes</Title>
         <Paragraph style={[styles.headerSubtitle, { color: theme.colors.onSurfaceVariant }]}>

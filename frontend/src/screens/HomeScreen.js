@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, Animated } from 'react-native';
 import { Card, Title, Paragraph, Button, ActivityIndicator } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import { AnimatedCard, AnimatedButton } from '../components/AnimatedComponents';
+import ConnectionIndicator from '../components/ConnectionIndicator';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { reportsService } from '../services/reportsService';
@@ -90,6 +91,9 @@ const HomeScreen = ({ navigation }) => {
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View style={{ marginTop: 35, paddingVertical: 2 }}>
+        <ConnectionIndicator />
+      </View>
       <Animated.View
         style={[
           styles.header,

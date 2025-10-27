@@ -8,6 +8,7 @@ import { useCart } from '../context/CartContext';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { isProductOnSale, getFinalPrice, getDiscountBadge } from '../utils/promotionUtils';
+import ConnectionIndicator from '../components/ConnectionIndicator';
 
 const ProductsScreen = ({ navigation }) => {
   const { theme } = useTheme();
@@ -308,6 +309,7 @@ const ProductsScreen = ({ navigation }) => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <ConnectionIndicator />
       <View style={[styles.searchContainer, { backgroundColor: theme.colors.surface }]}>
         <Searchbar
           placeholder="Buscar productos..."
