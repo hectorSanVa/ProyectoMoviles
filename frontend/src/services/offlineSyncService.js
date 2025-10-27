@@ -62,14 +62,28 @@ export const offlineSyncService = {
    */
   syncPendingSales: async (onProgress) => {
     // Evitar sincronización concurrente
-    const lock = await AsyncStorage.getItem(SYNC_LOCK_KEY);
-    if (lock) {
-      console.log('⚠️ Sincronización ya en progreso, omitiendo...');
-      return { synced: 0, failed: 0 };
+    const lockData = await AsyncStorage.getItem(SYNC_LOCK_KEY);
+    if (lockData) {
+      try {
+        const lock = JSON.parse(lockData);
+        // Si el lock tiene más de 5 minutos, liberarlo (probablemente quedó bloqueado)
+        if (lock.timestamp && (Date.now() - lock.timestamp > 300000)) {
+          console.log('⚠️ Liberando lock antiguo...');
+          await AsyncStorage.removeItem(SYNC_LOCK_KEY);
+        } else {
+          console.log('⚠️ Sincronización ya en progreso, omitiendo...');
+          return { synced: 0, failed: 0 };
+        }
+      } catch (e) {
+        // Si no se puede parsear, eliminar el lock
+        console.log('⚠️ Liberando lock inválido...');
+        await AsyncStorage.removeItem(SYNC_LOCK_KEY);
+      }
     }
 
     try {
-      await AsyncStorage.setItem(SYNC_LOCK_KEY, 'true');
+      // Guardar lock con timestamp
+      await AsyncStorage.setItem(SYNC_LOCK_KEY, JSON.stringify({ timestamp: Date.now() }));
       
       const pendingSales = await offlineSyncService.getPendingSales();
       const unsyncedSales = pendingSales.filter(sale => !sale.synced);
