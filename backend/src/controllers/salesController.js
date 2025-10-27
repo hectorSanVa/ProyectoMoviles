@@ -341,6 +341,7 @@ const salesController = {
         data: {
           id: sale.id,
           sale_number: sale.sale_number,
+          user_id: req.user.id,
           customer_name: customer_name,
           subtotal: sale.subtotal,
           tax_amount: sale.tax_amount,
