@@ -388,10 +388,18 @@ const SalesScreen = ({ navigation }) => {
       } catch (error) {
         // Si falla, guardar localmente
         console.warn('⚠️ Sin conexión, guardando venta localmente...');
-        const offlineSale = await offlineSyncService.savePendingSale(saleData);
-        saleResponse = { success: true, data: offlineSale };
-        isOfflineSale = true;
-        setPendingSalesCount(prev => prev + 1);
+        console.log('📦 Datos de la venta a guardar:', JSON.stringify(saleData, null, 2));
+        try {
+          const offlineSale = await offlineSyncService.savePendingSale(saleData);
+          console.log('✅ Venta offline guardada correctamente:', offlineSale.id);
+          saleResponse = { success: true, data: offlineSale };
+          isOfflineSale = true;
+          setPendingSalesCount(prev => prev + 1);
+        } catch (offlineError) {
+          console.error('❌ ERROR CRÍTICO: No se pudo guardar la venta offline:', offlineError);
+          Alert.alert('Error crítico', 'No se pudo guardar la venta. Por favor, revisa los logs.');
+          return;
+        }
       }
 
       if (saleResponse.success) {
@@ -421,7 +429,18 @@ const SalesScreen = ({ navigation }) => {
           : `Total: $${total.toFixed(2)}`;
 
         if (isOfflineSale) {
-          Alert.alert('Venta guardada offline', message, [{ text: 'OK' }]);
+          Alert.alert('Venta guardada offline', message, [{ 
+            text: 'OK', 
+            onPress: async () => {
+              await clearCart();
+              setCustomerName('');
+              setCashReceived('');
+              setShowPaymentModal(false);
+              setShowPaymentDetails(false);
+              setWasCartCleared(false);
+            }
+          }]);
+          return; // Salir temprano para ventas offline
         } else if (receiptResult?.success) {
           // Hablar el cambio si hay (en pesos mexicanos)
           if (paymentMethod === 'efectivo' && change > 0) {
