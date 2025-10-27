@@ -17,6 +17,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.inventario.app",
+      "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "Esta app necesita acceso a la cámara para escanear códigos de barras y QR."
       }
