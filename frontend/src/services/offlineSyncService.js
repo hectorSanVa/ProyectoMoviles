@@ -116,13 +116,15 @@ export const offlineSyncService = {
 
   /**
    * Verificar si hay conexión a internet
+   * Nota: Timeout aumentado a 40s para dar tiempo a que Render Free despierte
    */
   isOnline: async () => {
     try {
-      // Intentar hacer una petición simple al backend
-      const response = await api.get('/products?limit=1', { timeout: 3000 });
+      // Intentar hacer una petición simple al backend con timeout generoso
+      const response = await api.get('/api/health', { timeout: 40000 });
       return response.status === 200 || response.statusText === 'OK';
     } catch (error) {
+      console.log('⚠️ Servidor no responde, considerando offline:', error.message);
       return false;
     }
   },
