@@ -54,6 +54,16 @@ const config = {
   env: process.env.NODE_ENV || 'development',
   isDevelopment: process.env.NODE_ENV === 'development',
   isProduction: process.env.NODE_ENV === 'production',
+
+  // Hugging Face API
+  huggingface: {
+    apiKey: process.env.HUGGINGFACE_API_KEY,
+    apiUrl: 'https://api-inference.huggingface.co/models',
+    model: 'microsoft/DialoGPT-medium', // Modelo conversacional
+    // Alternativas si este falla:
+    // 'facebook/blenderbot-400M-distill' - Mejor para conversaciones
+    // 'google/flan-t5-base' - Multilenguaje, siempre disponible
+  },
 };
 
 module.exports = config;

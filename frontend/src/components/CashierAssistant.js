@@ -145,6 +145,12 @@ const CashierAssistant = ({ total, cart, todayStats, products }) => {
       // Usar IA gratuita de Hugging Face
       const token = await AsyncStorage.getItem('token');
       const apiUrl = 'https://inventario-api-7amo.onrender.com';
+      
+      console.log('🤖 Enviando pregunta al chatbot:', currentQuestion);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 segundos timeout
+      
       const response = await fetch(`${apiUrl}/api/ai/chat`, {
         method: 'POST',
         headers: {
@@ -158,14 +164,18 @@ const CashierAssistant = ({ total, cart, todayStats, products }) => {
           todayStats,
           products,
         }),
+        signal: controller.signal,
       });
+      
+      clearTimeout(timeoutId);
 
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ Respuesta del chatbot recibida:', data);
         
         const botMessage = {
           id: Date.now() + 1,
-          text: data.text,
+          text: data.text || data.error || 'No pude procesar tu pregunta',
           from: 'bot',
         };
 
@@ -175,10 +185,14 @@ const CashierAssistant = ({ total, cart, todayStats, products }) => {
           voiceSearchService.speak(data.speak);
         }
       } else {
-        throw new Error('Error en la respuesta');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('❌ Error en respuesta del servidor:', response.status, errorData);
+        throw new Error(errorData.error || `Error ${response.status}`);
       }
     } catch (error) {
-      console.error('Error con AI:', error);
+      console.error('❌ Error con AI:', error.message);
+      console.log('🔄 Usando fallback local...');
+      
       // Fallback a reglas locales
       const response = askAI(currentQuestion);
       

@@ -120,6 +120,7 @@ const startServer = async () => {
     console.log('🚀 Iniciando servidor...');
     console.log('🔍 Puerto:', PORT);
     console.log('🔍 Variables de entorno disponibles:', Object.keys(process.env).filter(key => key.includes('DATABASE') || key.includes('DB')));
+    console.log('🤖 Hugging Face API Key configurada:', process.env.HUGGINGFACE_API_KEY ? 'SÍ (' + process.env.HUGGINGFACE_API_KEY.substring(0, 10) + '...)' : 'NO');
     
     // Probar conexión a la base de datos
     await testConnection();

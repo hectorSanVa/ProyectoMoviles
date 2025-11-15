@@ -58,13 +58,14 @@ const HomeScreen = ({ navigation }) => {
   };
 
   // Elementos del menú basados en permisos
-  const menuItems = [
+  const allMenuItems = [
     {
       title: 'Productos',
       subtitle: 'Gestionar inventario',
       icon: 'inventory-2',
       color: theme.colors.primary,
       onPress: () => navigation.navigate('Products'),
+      roles: ['admin', 'cajero'] // Admin y cajero pueden ver productos
     },
     {
       title: 'Ventas',
@@ -72,6 +73,23 @@ const HomeScreen = ({ navigation }) => {
       icon: 'point-of-sale',
       color: theme.colors.tertiary,
       onPress: () => navigation.navigate('Sales'),
+      roles: ['admin', 'cajero'] // Admin y cajero pueden ver ventas
+    },
+    {
+      title: 'Mis Ventas',
+      subtitle: 'Ver mis comprobantes',
+      icon: 'receipt',
+      color: '#00BCD4',
+      onPress: () => navigation.navigate('Receipts'),
+      roles: ['cajero'] // Solo cajero ve sus propias ventas
+    },
+    {
+      title: 'Reportes',
+      subtitle: 'Mis estadísticas',
+      icon: 'show-chart',
+      color: '#9E9E9E',
+      onPress: () => navigation.navigate('Reports'),
+      roles: ['cajero'] // Cajero puede ver sus propios reportes
     },
     {
       title: 'Inventario',
@@ -79,6 +97,7 @@ const HomeScreen = ({ navigation }) => {
       icon: 'warehouse',
       color: theme.colors.secondary,
       onPress: () => navigation.navigate('Inventory'),
+      roles: ['admin'] // Solo admin puede ver inventario detallado
     },
     {
       title: 'Reportes',
@@ -86,8 +105,52 @@ const HomeScreen = ({ navigation }) => {
       icon: 'assessment',
       color: theme.colors.info,
       onPress: () => navigation.navigate('Reports'),
+      roles: ['admin'] // Solo admin puede ver reportes
+    },
+    {
+      title: 'Categorías',
+      subtitle: 'Gestionar categorías',
+      icon: 'category',
+      color: '#9C27B0',
+      onPress: () => navigation.navigate('Config', { screen: 'Categories' }),
+      roles: ['admin']
+    },
+    {
+      title: 'Descuentos',
+      subtitle: 'Promociones y ofertas',
+      icon: 'local-offer',
+      color: '#FF9800',
+      onPress: () => navigation.navigate('Config', { screen: 'Discounts' }),
+      roles: ['admin']
+    },
+    {
+      title: 'Proveedores',
+      subtitle: 'Gestionar proveedores',
+      icon: 'business',
+      color: '#2196F3',
+      onPress: () => navigation.navigate('Config', { screen: 'Suppliers' }),
+      roles: ['admin']
+    },
+    {
+      title: 'Usuarios',
+      subtitle: 'Gestionar usuarios',
+      icon: 'people',
+      color: '#4CAF50',
+      onPress: () => navigation.navigate('Config', { screen: 'Users' }),
+      roles: ['admin']
+    },
+    {
+      title: 'Alertas de Vencimiento',
+      subtitle: 'Productos próximos a vencer',
+      icon: 'warning',
+      color: '#F44336',
+      onPress: () => navigation.navigate('Config', { screen: 'ExpirationAlerts' }),
+      roles: ['admin']
     },
   ];
+  
+  // Filtrar items según el rol del usuario
+  const menuItems = allMenuItems.filter(item => item.roles.includes(role || 'cajero'));
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>

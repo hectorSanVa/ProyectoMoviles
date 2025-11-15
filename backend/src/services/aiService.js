@@ -3,6 +3,7 @@
  * Modelo: gpt2 en español (gratuito, sin límites)
  */
 const fetch = require('node-fetch');
+const config = require('../config/config');
 
 /**
  * Procesa una pregunta usando IA gratuita
@@ -12,27 +13,192 @@ const fetch = require('node-fetch');
  */
 async function processAIQuestion(question, context = {}) {
   console.log('🤖 Procesando pregunta:', question);
-  console.log('🔍 Usando IA contextual mejorada...');
+  console.log('🔑 Token Hugging Face configurado:', config.huggingface.apiKey ? 'SÍ' : 'NO');
+  console.log('🔑 Longitud del token:', config.huggingface.apiKey ? config.huggingface.apiKey.length : 0);
   
-  // Por ahora, usar el sistema inteligente mejorado que simula IA
-  // pero con respuestas más inteligentes basadas en el contexto
+  // Si tenemos API key de Hugging Face, intentar usarla
+  if (config.huggingface.apiKey && config.huggingface.apiKey.length > 0) {
+    try {
+      console.log('🔍 Intentando usar IA real de Hugging Face...');
+      console.log('🌐 Modelo:', config.huggingface.model);
+      console.log('🌐 URL:', `${config.huggingface.apiUrl}/${config.huggingface.model}`);
+      
+      const aiResponse = await callHuggingFaceAPI(question, context);
+      
+      if (aiResponse && aiResponse.text) {
+        console.log('✅ Respuesta de IA REAL obtenida:', aiResponse.text.substring(0, 100));
+        return aiResponse;
+      } else {
+        console.log('⚠️  IA no devolvió respuesta válida, usando fallback');
+      }
+    } catch (error) {
+      console.error('❌ Error con Hugging Face API:', error.message);
+      console.log('⚠️  Fallback a reglas locales');
+    }
+  } else {
+    console.log('⚠️  No hay token de Hugging Face configurado, usando reglas locales');
+  }
+  
+  // Usar sistema inteligente como respuesta principal o fallback
+  console.log('🔍 Usando sistema inteligente contextual...');
   try {
-    // Simular delay de IA
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    // Procesar con el sistema inteligente mejorado
     const smartResponse = await processSmartRules(question, context);
     
     if (smartResponse) {
       console.log('✅ Respuesta inteligente obtenida');
       return smartResponse;
     }
-    
-    throw new Error('No hay respuesta inteligente');
   } catch (error) {
     console.log('⚠️  Usando reglas básicas:', error.message);
-    // Fallback a reglas básicas
-    return processBasicRules(question, context);
+  }
+  
+  // Fallback final a reglas básicas
+  console.log('🔍 Usando reglas básicas (fallback final)');
+  return processBasicRules(question, context);
+}
+
+/**
+ * Llama a la API de Hugging Face para obtener respuesta con IA
+ */
+async function callHuggingFaceAPI(question, context) {
+  try {
+    const { cart, total, todayStats } = context;
+    
+    // Crear contexto para la IA
+    const contextPrompt = `
+Estás en una tienda de abarrotitos. Eres un asistente AI útil y profesional.
+
+Información actual:
+- Total del carrito: $${total || 0}
+- Productos en carrito: ${cart?.length || 0}
+- Ventas del día: ${todayStats?.total_sales || 0}
+
+Responde de forma breve, amigable y profesional. Máximo 2-3 oraciones.
+
+Usuario: ${question}
+Asistente:`;
+
+    console.log('📤 Enviando request a Hugging Face...');
+    console.log('📝 Prompt:', contextPrompt.substring(0, 200) + '...');
+    console.log('🌐 URL completa:', `${config.huggingface.apiUrl}/${config.huggingface.model}`);
+
+    const response = await fetch(
+      `${config.huggingface.apiUrl}/${config.huggingface.model}`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.huggingface.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          inputs: contextPrompt,
+          parameters: {
+            max_length: 150,
+            temperature: 0.8,
+            top_p: 0.9,
+            return_full_text: false, // No devolver el prompt original
+          },
+        }),
+      }
+    );
+
+    console.log('📥 Status de respuesta:', response.status, response.statusText);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Error de Hugging Face:', errorText);
+      
+      // Si el modelo está en "cold start" (503), esperar un poco y reintentar
+      if (response.status === 503) {
+        console.log('⏳ Modelo en cold start, esperando 10 segundos...');
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        
+        // Reintentar una vez
+        console.log('🔄 Reintentando...');
+        const retryResponse = await fetch(
+          `${config.huggingface.apiUrl}/${config.huggingface.model}`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${config.huggingface.apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              inputs: contextPrompt,
+              parameters: {
+                max_length: 150,
+                temperature: 0.8,
+                top_p: 0.9,
+                return_full_text: false,
+              },
+            }),
+          }
+        );
+        
+        if (retryResponse.ok) {
+          const retryData = await retryResponse.json();
+          console.log('✅ Respuesta después del reintento recibida');
+          // Procesar respuesta del reintento
+          let aiText = '';
+          if (Array.isArray(retryData)) {
+            aiText = retryData[0]?.generated_text || '';
+          } else if (retryData.generated_text) {
+            aiText = retryData.generated_text;
+          }
+          
+          if (aiText && aiText.length > 0) {
+            if (aiText.includes('Usuario:')) {
+              const parts = aiText.split('Asistente:');
+              if (parts.length > 1) {
+                aiText = parts[parts.length - 1].trim();
+              }
+            }
+            return {
+              text: aiText.trim(),
+              speak: aiText.trim().substring(0, 100),
+            };
+          }
+        }
+      }
+      
+      throw new Error(`API error: ${response.status} - ${errorText.substring(0, 100)}`);
+    }
+
+    const data = await response.json();
+    console.log('📥 Respuesta de Hugging Face recibida:', JSON.stringify(data).substring(0, 200));
+    
+    // Extraer la respuesta del formato de Hugging Face
+    let aiText = '';
+    if (Array.isArray(data)) {
+      aiText = data[0]?.generated_text || '';
+    } else if (data.generated_text) {
+      aiText = data.generated_text;
+    } else if (data[0]?.generated_text) {
+      aiText = data[0].generated_text;
+    }
+    
+    // Limpiar el texto (remover el prompt original si está incluido)
+    if (aiText && aiText.includes('Usuario:')) {
+      const parts = aiText.split('Asistente:');
+      if (parts.length > 1) {
+        aiText = parts[parts.length - 1].trim();
+      }
+    }
+    
+    if (aiText && aiText.length > 0) {
+      console.log('✅ Texto extraído de IA:', aiText.substring(0, 100));
+      return {
+        text: aiText.trim(),
+        speak: aiText.trim().substring(0, 100), // Limitar para TTS
+      };
+    }
+    
+    console.log('⚠️  No se pudo extraer texto de la respuesta');
+    return null;
+  } catch (error) {
+    console.error('❌ Error llamando a Hugging Face:', error.message);
+    console.error('❌ Stack:', error.stack);
+    throw error;
   }
 }
 
@@ -45,8 +211,9 @@ async function processSmartRules(question, context) {
   
   // Preguntas sobre stock actual (muchas variaciones)
   if (lower.includes('stock') || lower.includes('inventario') || lower.includes('cantidad') || 
-      lower.includes('hay') && lower.includes('producto') || lower.includes('mercancia') || 
-      lower.includes('artículos') || lower.includes('items')) {
+      (lower.includes('hay') && lower.includes('producto')) || lower.includes('mercancia') || 
+      lower.includes('artículos') || lower.includes('items') || lower.includes('existencias') ||
+      lower.includes('disponible') || lower.includes('almacen') || lower.includes('bodega')) {
     if (products && Array.isArray(products)) {
       const lowStock = products.filter(p => (p.stock || 0) <= (p.min_stock || 0)).length;
       const totalProducts = products.length;
@@ -59,9 +226,11 @@ async function processSmartRules(question, context) {
   }
   
   // Preguntas sobre productos específicos (muchas variaciones)
-  if ((lower.includes('producto') || lower.includes('articulo') || lower.includes('item')) && 
+  if ((lower.includes('producto') || lower.includes('articulo') || lower.includes('item') || lower.includes('mercanci')) && 
       (lower.includes('tienes') || lower.includes('hay') || lower.includes('muestra') || 
-       lower.includes('dime') || lower.includes('lista') || lower.includes('disponibles'))) {
+       lower.includes('dime') || lower.includes('lista') || lower.includes('disponibles') ||
+       lower.includes('existe') || lower.includes('ofreces') || lower.includes('cuenta') ||
+       lower.includes('tengo') || lower.includes('tiene'))) {
     if (products && Array.isArray(products) && products.length > 0) {
       const top5 = products.slice(0, 5).map(p => `• ${p.name} - Stock: ${p.stock || 0}`).join('\n');
       return {
@@ -72,9 +241,12 @@ async function processSmartRules(question, context) {
   }
   
   // Preguntas sobre ventas (muchas variaciones)
-  if ((lower.includes('venta') || lower.includes('ventas')) || 
-      (lower.includes('total') || lower.includes('dinero') || lower.includes('ingreso')) ||
-      (lower.includes('cuanto') && lower.includes('vendido')) || (lower.includes('hecho'))) {
+  if (lower.includes('venta') || lower.includes('ventas') || 
+      lower.includes('dinero') || lower.includes('ingreso') ||
+      lower.includes('ingresos') || lower.includes('ingresado') ||
+      (lower.includes('cuanto') && lower.includes('vendido')) || 
+      (lower.includes('cuanto') && lower.includes('hecho')) ||
+      lower.includes('facturacion') || lower.includes('facturación')) {
     if (todayStats) {
       return {
         text: `💰 VENTAS DEL DÍA:\n\n• Total: $${(todayStats.total_amount || 0).toFixed(2)}\n• Cantidad: ${todayStats.total_sales || 0} ventas\n• Promedio: $${((todayStats.total_amount || 0) / (todayStats.total_sales || 1)).toFixed(2)}`,
@@ -244,9 +416,32 @@ function processBasicRules(question, context) {
     };
   }
   
+  // Preguntas sobre cómo usar el sistema
+  if (lower.includes('como') || lower.includes('cómo') || lower.includes('como se')) {
+    return {
+      text: '💡 CÓMO USAR EL SISTEMA:\n\n• Agrega productos al carrito\n• Calcula cambios con "cambio X"\n• Ve ventas del día\n• Consulta el stock\n• Revisa reportes\n\n¿Qué necesitas hacer?',
+      speak: null,
+    };
+  }
+  
+  // Preguntas sobre precio
+  if (lower.includes('precio') || lower.includes('cuesta') || lower.includes('vale')) {
+    if (cart && cart.length > 0) {
+      const cartTotal = cart.reduce((sum, item) => sum + (item.price || 0), 0);
+      return {
+        text: `💰 PRECIO DEL CARRITO: $${cartTotal.toFixed(2)}\n\nProductos: ${cart.length}\n\n¿Quieres calcular el cambio? Escribe "cambio X"`,
+        speak: `Total: ${cartTotal.toFixed(2)} pesos`,
+      };
+    }
+    return {
+      text: '💰 El carrito está vacío. Agrega productos primero.',
+      speak: 'Carrito vacío',
+    };
+  }
+  
   // Respuesta por defecto
   return {
-    text: '🤔 No entendí completamente.\n\nUsa "ayuda" para ver comandos o intenta otra pregunta.',
+    text: '🤔 No entendí completamente.\n\nPrueba con:\n• "cambio 500"\n• "ventas hoy"\n• "stock bajo"\n• "productos disponibles"\n\nO usa "ayuda" para ver comandos.',
     speak: null,
   };
 }
