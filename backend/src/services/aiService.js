@@ -64,19 +64,14 @@ async function callHuggingFaceAPI(question, context) {
   try {
     const { cart, total, todayStats } = context;
     
-    // Crear contexto para la IA
-    const contextPrompt = `
-Estás en una tienda de abarrotitos. Eres un asistente AI útil y profesional.
+    // Crear contexto para la IA (formato para flan-t5-base)
+    const contextPrompt = `Eres un asistente de tienda. Responde brevemente en español.
 
-Información actual:
-- Total del carrito: $${total || 0}
-- Productos en carrito: ${cart?.length || 0}
-- Ventas del día: ${todayStats?.total_sales || 0}
+Pregunta: ${question}
 
-Responde de forma breve, amigable y profesional. Máximo 2-3 oraciones.
+Contexto: Carrito tiene ${cart?.length || 0} productos. Total: $${total || 0}. Ventas hoy: ${todayStats?.total_sales || 0}.
 
-Usuario: ${question}
-Asistente:`;
+Respuesta:`;
 
     console.log('📤 Enviando request a Hugging Face...');
     console.log('📝 Prompt:', contextPrompt.substring(0, 200) + '...');
@@ -93,10 +88,10 @@ Asistente:`;
         body: JSON.stringify({
           inputs: contextPrompt,
           parameters: {
-            max_length: 150,
-            temperature: 0.8,
-            top_p: 0.9,
-            return_full_text: false, // No devolver el prompt original
+            max_length: 100,
+            temperature: 0.7,
+            top_p: 0.95,
+            do_sample: true,
           },
         }),
       }

@@ -59,10 +59,11 @@ const config = {
   huggingface: {
     apiKey: process.env.HUGGINGFACE_API_KEY,
     apiUrl: 'https://api-inference.huggingface.co/models',
-    model: 'microsoft/DialoGPT-medium', // Modelo conversacional
-    // Alternativas si este falla:
-    // 'facebook/blenderbot-400M-distill' - Mejor para conversaciones
-    // 'google/flan-t5-base' - Multilenguaje, siempre disponible
+    // Cambiado a un modelo más confiable y rápido
+    model: 'google/flan-t5-base', // Multilenguaje, siempre disponible, más rápido
+    // Alternativas:
+    // 'microsoft/DialoGPT-medium' - Conversacional pero puede estar en cold start
+    // 'facebook/blenderbot-400M-distill' - Mejor para conversaciones pero más lento
   },
 };
 
