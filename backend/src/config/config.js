@@ -58,7 +58,7 @@ const config = {
   // Hugging Face API
   huggingface: {
     apiKey: process.env.HUGGINGFACE_API_KEY,
-    apiUrl: 'https://api-inference.huggingface.co/models',
+    apiUrl: 'https://router.huggingface.co/hf-inference', // Nueva URL de Hugging Face
     // Cambiado a un modelo más confiable y rápido
     model: 'google/flan-t5-base', // Multilenguaje, siempre disponible, más rápido
     // Alternativas:

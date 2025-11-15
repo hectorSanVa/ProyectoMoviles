@@ -75,10 +75,11 @@ Respuesta:`;
 
     console.log('📤 Enviando request a Hugging Face...');
     console.log('📝 Prompt:', contextPrompt.substring(0, 200) + '...');
-    console.log('🌐 URL completa:', `${config.huggingface.apiUrl}/${config.huggingface.model}`);
+    console.log('🌐 URL completa:', `${config.huggingface.apiUrl}?model=${config.huggingface.model}`);
 
+    // Nueva API de Hugging Face requiere formato diferente
     const response = await fetch(
-      `${config.huggingface.apiUrl}/${config.huggingface.model}`,
+      `${config.huggingface.apiUrl}?model=${config.huggingface.model}`,
       {
         method: 'POST',
         headers: {
@@ -111,7 +112,7 @@ Respuesta:`;
         // Reintentar una vez
         console.log('🔄 Reintentando...');
         const retryResponse = await fetch(
-          `${config.huggingface.apiUrl}/${config.huggingface.model}`,
+          `${config.huggingface.apiUrl}?model=${config.huggingface.model}`,
           {
             method: 'POST',
             headers: {
@@ -121,10 +122,10 @@ Respuesta:`;
             body: JSON.stringify({
               inputs: contextPrompt,
               parameters: {
-                max_length: 150,
-                temperature: 0.8,
-                top_p: 0.9,
-                return_full_text: false,
+                max_length: 100,
+                temperature: 0.7,
+                top_p: 0.95,
+                do_sample: true,
               },
             }),
           }
